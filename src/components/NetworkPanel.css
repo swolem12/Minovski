@@ -289,6 +289,42 @@
   letter-spacing: 0.5px;
 }
 
+.host-hint {
+  font-size: 10px;
+  color: #5a5d68;
+  margin-bottom: 8px;
+  font-style: italic;
+}
+
+.btn-view-switch {
+  padding: 4px 10px;
+  background: rgba(0, 212, 255, 0.15);
+  color: #00d4ff;
+  border: 1px solid rgba(0, 212, 255, 0.3);
+  border-radius: 4px;
+  font-size: 10px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s;
+  margin-left: auto;
+}
+
+.btn-view-switch:hover {
+  background: rgba(0, 212, 255, 0.25);
+  border-color: #00d4ff;
+}
+
+.btn-view-switch.viewing {
+  background: rgba(0, 212, 255, 0.3);
+  border-color: #00d4ff;
+  color: #ffffff;
+}
+
+.peer-item.active-view {
+  border-left-color: #00d4ff;
+  background: rgba(0, 212, 255, 0.1);
+}
+
 .remote-alerts {
   margin-top: 16px;
   padding-top: 16px;

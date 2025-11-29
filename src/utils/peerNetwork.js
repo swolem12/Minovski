@@ -167,6 +167,14 @@ class PeerNetwork {
       case 'heartbeat':
         // Keep-alive
         break;
+      case 'view-switch':
+        // Host commanding to switch view to a specific device's feed
+        this.emit('view-switch', { peerId, targetDevice: data.targetDevice });
+        break;
+      case 'chat-message':
+        // Chat message from a peer
+        this.emit('chat-message', { peerId, message: data.message, timestamp: data.timestamp });
+        break;
       default:
         this.emit('message', { peerId, type, data });
     }
@@ -199,6 +207,49 @@ class PeerNetwork {
         sourceDevice: this.deviceId,
         timestamp: Date.now()
       }
+    });
+  }
+  
+  /**
+   * Send view switch command to all peers (host only)
+   * @param {string} targetDevice - Device ID to switch view to
+   */
+  broadcastViewSwitch(targetDevice) {
+    if (!this.isHost) {
+      console.warn('Only host can switch views');
+      return;
+    }
+    this.broadcast({
+      type: 'view-switch',
+      data: {
+        targetDevice,
+        sourceDevice: this.deviceId,
+        timestamp: Date.now()
+      }
+    });
+  }
+  
+  /**
+   * Send chat message to all connected peers
+   * @param {string} message - Chat message text
+   */
+  broadcastChatMessage(message) {
+    const timestamp = Date.now();
+    const chatData = {
+      type: 'chat-message',
+      data: {
+        message,
+        sourceDevice: this.deviceId,
+        timestamp
+      }
+    };
+    this.broadcast(chatData);
+    // Also emit locally so sender sees their own message
+    this.emit('chat-message', { 
+      peerId: this.deviceId, 
+      message, 
+      timestamp,
+      isLocal: true 
     });
   }
   
