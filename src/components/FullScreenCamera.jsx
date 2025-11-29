@@ -7,6 +7,8 @@ import { classifyDetections as classifyCocoDetections, getOverallThreatLevel, ge
 import { yolov8Detector } from '../utils/yolov8Detector';
 import { demoDetector } from '../utils/demoDetector';
 import audioAlert from '../utils/audioAlert';
+import ChatPanel from './ChatPanel';
+import WalkieTalkie from './WalkieTalkie';
 import './FullScreenCamera.css';
 
 const PREFERRED_MODEL = 'yolov8';
@@ -32,6 +34,9 @@ function FullScreenCamera({ onClose, onDetections, onThreatLevel }) {
   const animationRef = useRef(null);
   const streamRef = useRef(null);
   const trackRef = useRef(null);
+  
+  // Communication panel state
+  const [showCommPanel, setShowCommPanel] = useState(false);
   
   // Camera capabilities state
   const [cameraCapabilities, setCameraCapabilities] = useState({
@@ -622,6 +627,18 @@ function FullScreenCamera({ onClose, onDetections, onThreatLevel }) {
         </aside>
       </main>
       
+      {/* Communication Panel (Chat + Walkie-Talkie) - Slide out from right */}
+      <div className={`fs-comm-panel ${showCommPanel ? 'visible' : ''}`}>
+        <div className="fs-comm-header">
+          <span className="fs-comm-title">📡 COMMS</span>
+          <button className="fs-comm-close" onClick={() => setShowCommPanel(false)}>×</button>
+        </div>
+        <div className="fs-comm-content">
+          <WalkieTalkie />
+          <ChatPanel />
+        </div>
+      </div>
+      
       {/* Footer */}
       <footer className="fs-footer">
         <div className="fs-footer-left">
@@ -629,7 +646,13 @@ function FullScreenCamera({ onClose, onDetections, onThreatLevel }) {
           <span>OPTICAL TRACKING ACTIVE</span>
         </div>
         <div className="fs-footer-center">
-          Point camera at sky to detect aerial threats
+          <button 
+            className={`fs-btn-comm ${showCommPanel ? 'active' : ''}`}
+            onClick={() => setShowCommPanel(!showCommPanel)}
+          >
+            <span className="fs-comm-icon">💬</span>
+            <span>COMMS</span>
+          </button>
         </div>
         <div className="fs-footer-right">
           {cameraActive && <span className="fs-camera-active">● CAMERA ONLINE</span>}

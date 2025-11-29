@@ -134,6 +134,27 @@
   letter-spacing: 0.5px;
 }
 
+.grid-view-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-left: 12px;
+  padding: 4px 10px;
+  background: rgba(255, 200, 50, 0.15);
+  border: 1px solid rgba(255, 200, 50, 0.3);
+  border-radius: 4px;
+  font-size: 10px;
+  font-weight: 500;
+  color: #ffc832;
+  letter-spacing: 0.5px;
+  animation: gridPulse 2s infinite;
+}
+
+@keyframes gridPulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.7; }
+}
+
 @keyframes recordBlink {
   0%, 100% { opacity: 1; }
   50% { opacity: 0.3; }

@@ -3,7 +3,7 @@ import { animate } from 'animejs';
 import peerNetwork from '../utils/peerNetwork';
 import './NetworkPanel.css';
 
-function NetworkPanel({ onRemoteDetection, onViewSwitch }) {
+function NetworkPanel({ onRemoteDetection, onViewSwitch, onGridViewToggle }) {
   const [isConnected, setIsConnected] = useState(false);
   const [deviceId, setDeviceId] = useState('');
   const [peers, setPeers] = useState([]);
@@ -13,6 +13,7 @@ function NetworkPanel({ onRemoteDetection, onViewSwitch }) {
   const [isExpanded, setIsExpanded] = useState(false);
   const [isHost, setIsHost] = useState(false);
   const [activeViewDevice, setActiveViewDevice] = useState(null);
+  const [isGridView, setIsGridView] = useState(false);
   const panelRef = useRef(null);
   const alertsRef = useRef(null);
   
@@ -145,6 +146,12 @@ function NetworkPanel({ onRemoteDetection, onViewSwitch }) {
   const handleViewSwitch = (targetDeviceId) => {
     if (!isHost) return;
     
+    // Disable grid view when switching to a specific device
+    if (isGridView) {
+      setIsGridView(false);
+      onGridViewToggle?.(false);
+    }
+    
     peerNetwork.broadcastViewSwitch(targetDeviceId);
     setActiveViewDevice(targetDeviceId);
     onViewSwitch?.({ targetDevice: targetDeviceId, fromHost: deviceId });
@@ -154,6 +161,26 @@ function NetworkPanel({ onRemoteDetection, onViewSwitch }) {
       backgroundColor: ['rgba(0, 212, 255, 0.3)', 'rgba(255, 255, 255, 0.02)'],
       duration: 500,
       ease: 'outQuad'
+    });
+  };
+  
+  const handleGridViewToggle = () => {
+    if (!isHost) return;
+    
+    const newGridState = !isGridView;
+    setIsGridView(newGridState);
+    
+    // Clear individual device view when switching to grid
+    if (newGridState) {
+      setActiveViewDevice(null);
+    }
+    
+    onGridViewToggle?.(newGridState);
+    
+    // Animate the grid button
+    animate('.btn-grid-view', {
+      scale: [1, 1.1, 1],
+      duration: 300
     });
   };
 
@@ -239,21 +266,37 @@ function NetworkPanel({ onRemoteDetection, onViewSwitch }) {
           
           {peers.length > 0 && (
             <div className="peers-list">
-              <h4>Connected Devices:</h4>
+              <div className="peers-header">
+                <h4>Connected Devices:</h4>
+                {isHost && peers.length > 0 && (
+                  <button 
+                    className={`btn-grid-view ${isGridView ? 'active' : ''}`}
+                    onClick={handleGridViewToggle}
+                    title="Show all device feeds in grid view"
+                  >
+                    <span className="grid-icon">⊞</span>
+                    <span>{isGridView ? 'Grid ON' : 'Grid View'}</span>
+                  </button>
+                )}
+              </div>
               {isHost && (
-                <p className="host-hint">Click &quot;View&quot; to switch to a device&apos;s camera feed</p>
+                <p className="host-hint">
+                  {isGridView 
+                    ? 'Grid view active - showing all device feeds' 
+                    : 'Click "View" to switch to a device\'s camera feed'}
+                </p>
               )}
               <ul>
                 {peers.map((peer) => (
                   <li 
                     key={peer} 
-                    className={`peer-item ${activeViewDevice === peer ? 'active-view' : ''}`}
+                    className={`peer-item ${activeViewDevice === peer ? 'active-view' : ''} ${isGridView ? 'grid-active' : ''}`}
                     data-peer={peer}
                   >
                     <span className="peer-icon">📱</span>
                     <span className="peer-id">{peer}</span>
                     <span className="peer-status">Active</span>
-                    {isHost && (
+                    {isHost && !isGridView && (
                       <button 
                         className={`btn-view-switch ${activeViewDevice === peer ? 'viewing' : ''}`}
                         onClick={() => handleViewSwitch(peer)}
