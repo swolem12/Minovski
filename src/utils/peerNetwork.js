@@ -27,6 +27,10 @@ class PeerNetwork {
     // Audio/media call support
     this.mediaConnections = new Map();
     this.localAudioStream = null;
+    // Video streaming support
+    this.videoConnections = new Map();
+    this.localVideoStream = null;
+    this.isStreamingVideo = false;
   }
   
   /**
@@ -357,6 +361,10 @@ If problems persist, try:
         // Walkie-talkie push-to-talk status
         this.emit('walkie-status', { peerId, isActive: data.isActive, timestamp: data.timestamp });
         break;
+      case 'video-request':
+        // Another peer is requesting our video stream
+        this.emit('video-request', { peerId, requesterId: data.requesterId, timestamp: data.timestamp });
+        break;
       default:
         this.emit('message', { peerId, type, data });
     }
@@ -440,34 +448,63 @@ If problems persist, try:
    */
   handleIncomingCall(call) {
     const peerId = call.peer;
-    console.log('Incoming call from:', peerId);
+    const callMetadata = call.metadata || {};
+    const isVideoCall = callMetadata.type === 'video';
     
-    // Answer the call - if we have a local stream, share it; otherwise answer without stream
-    // PeerJS handles the case where answer() is called without a stream
-    if (this.localAudioStream) {
-      call.answer(this.localAudioStream);
+    console.log(`Incoming ${isVideoCall ? 'video' : 'audio'} call from:`, peerId);
+    
+    if (isVideoCall) {
+      // This is a video call - answer with our local video stream if we're streaming
+      if (this.localVideoStream) {
+        call.answer(this.localVideoStream);
+      } else {
+        // Answer without stream - we'll get their stream anyway
+        call.answer();
+      }
+      
+      call.on('stream', (remoteStream) => {
+        console.log('Received remote video stream from:', peerId);
+        this.emit('remote-video', { peerId, stream: remoteStream });
+      });
+      
+      call.on('close', () => {
+        console.log('Video call closed with:', peerId);
+        this.videoConnections.delete(peerId);
+        this.emit('video-ended', { peerId });
+      });
+      
+      call.on('error', (err) => {
+        console.error('Video call error with', peerId, err);
+        this.emit('video-error', { peerId, error: err });
+      });
+      
+      this.videoConnections.set(peerId, call);
     } else {
-      // Answer without stream - we'll add our stream later when user starts talking
-      call.answer();
+      // This is an audio call
+      if (this.localAudioStream) {
+        call.answer(this.localAudioStream);
+      } else {
+        call.answer();
+      }
+      
+      call.on('stream', (remoteStream) => {
+        console.log('Received remote audio stream from:', peerId);
+        this.emit('remote-audio', { peerId, stream: remoteStream });
+      });
+      
+      call.on('close', () => {
+        console.log('Audio call closed with:', peerId);
+        this.mediaConnections.delete(peerId);
+        this.emit('audio-ended', { peerId });
+      });
+      
+      call.on('error', (err) => {
+        console.error('Audio call error with', peerId, err);
+        this.emit('audio-error', { peerId, error: err });
+      });
+      
+      this.mediaConnections.set(peerId, call);
     }
-    
-    call.on('stream', (remoteStream) => {
-      console.log('Received remote audio stream from:', peerId);
-      this.emit('remote-audio', { peerId, stream: remoteStream });
-    });
-    
-    call.on('close', () => {
-      console.log('Call closed with:', peerId);
-      this.mediaConnections.delete(peerId);
-      this.emit('audio-ended', { peerId });
-    });
-    
-    call.on('error', (err) => {
-      console.error('Call error with', peerId, err);
-      this.emit('audio-error', { peerId, error: err });
-    });
-    
-    this.mediaConnections.set(peerId, call);
   }
   
   /**
@@ -546,6 +583,111 @@ If problems persist, try:
   }
   
   /**
+   * Start video streaming (share camera with peers)
+   * @param {MediaStream} existingStream - Optional existing video stream to use
+   * @returns {Promise<MediaStream>} The local video stream
+   */
+  async startVideoStream(existingStream = null) {
+    try {
+      if (existingStream) {
+        this.localVideoStream = existingStream;
+      } else {
+        // Get video stream from camera
+        this.localVideoStream = await navigator.mediaDevices.getUserMedia({
+          video: {
+            facingMode: 'environment',
+            width: { ideal: 1280 },
+            height: { ideal: 720 }
+          },
+          audio: false
+        });
+      }
+      
+      this.isStreamingVideo = true;
+      
+      // Call all connected peers with the video stream
+      for (const peerId of this.connections.keys()) {
+        this.callPeerWithVideo(peerId);
+      }
+      
+      this.emit('video-started', { deviceId: this.deviceId });
+      return this.localVideoStream;
+    } catch (err) {
+      console.error('Failed to get video stream:', err);
+      this.emit('video-error', { error: err });
+      throw err;
+    }
+  }
+  
+  /**
+   * Call a specific peer with video
+   */
+  callPeerWithVideo(peerId) {
+    if (!this.peer || !this.localVideoStream) return;
+    
+    // Use metadata to indicate this is a video call
+    const call = this.peer.call(peerId, this.localVideoStream, {
+      metadata: { type: 'video' }
+    });
+    if (!call) return;
+    
+    call.on('stream', (remoteStream) => {
+      this.emit('remote-video', { peerId, stream: remoteStream });
+    });
+    
+    call.on('close', () => {
+      this.videoConnections.delete(peerId);
+      this.emit('video-ended', { peerId });
+    });
+    
+    call.on('error', (err) => {
+      console.error('Video call error:', err);
+      this.emit('video-error', { peerId, error: err });
+    });
+    
+    this.videoConnections.set(peerId, call);
+  }
+  
+  /**
+   * Request video from a specific peer (used when host wants to view a device's camera)
+   * @param {string} peerId - The peer to request video from
+   */
+  requestVideoFromPeer(peerId) {
+    // Send a request to the peer to start streaming their video
+    const conn = this.connections.get(peerId);
+    if (conn && conn.open) {
+      conn.send({
+        type: 'video-request',
+        data: {
+          requesterId: this.deviceId,
+          timestamp: Date.now()
+        }
+      });
+      this.emit('video-requested', { peerId });
+    }
+  }
+  
+  /**
+   * Stop video streaming (release camera for video calls)
+   */
+  stopVideoStream() {
+    if (this.localVideoStream) {
+      this.localVideoStream.getTracks().forEach(track => track.stop());
+      this.localVideoStream = null;
+    }
+    
+    this.isStreamingVideo = false;
+    
+    // Close all video connections
+    for (const call of this.videoConnections.values()) {
+      call.close();
+    }
+    this.videoConnections.clear();
+    
+    this.emit('video-stopped', { deviceId: this.deviceId });
+  }
+  
+  /**
    * Notify peers that walkie-talkie is active (push-to-talk started)
    */
   broadcastWalkieStatus(isActive) {
@@ -616,6 +758,12 @@ If problems persist, try:
    * Disconnect and cleanup
    */
   disconnect() {
+    // Stop video streaming
+    this.stopVideoStream();
+    
+    // Stop audio streaming
+    this.stopAudioBroadcast();
+    
     for (const conn of this.connections.values()) {
       conn.close();
     }

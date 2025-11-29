@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { animate, utils } from 'animejs';
 import CameraView from './CameraView';
 import ThreatDisplay from './ThreatDisplay';
@@ -19,8 +19,11 @@ function TrackingPage({ onBackToHome }) {
   const [isFullScreen, setIsFullScreen] = useState(false);
   const [activeViewDevice, setActiveViewDevice] = useState(null);
   const [isGridView, setIsGridView] = useState(false);
+  const [remoteVideoStream, setRemoteVideoStream] = useState(null);
+  const [isLoadingRemoteVideo, setIsLoadingRemoteVideo] = useState(false);
   const containerRef = useRef(null);
   const headerRef = useRef(null);
+  const remoteVideoRef = useRef(null);
   
   // Animate page load
   useEffect(() => {
@@ -100,22 +103,97 @@ function TrackingPage({ onBackToHome }) {
   const totalThreats = detections.filter(isAerialThreat).length + 
     remoteDetections.reduce((acc, rd) => acc + (rd.detection.threats?.length || 0), 0);
   
-  // Handle view switch from host
-  const handleViewSwitch = ({ targetDevice }) => {
+  // Handle view switch from host - request video from target device
+  const handleViewSwitch = useCallback(({ targetDevice }) => {
     setActiveViewDevice(targetDevice);
     setIsGridView(false); // Disable grid view when switching to specific device
-    // Notify user about view switch
-    console.log(`View switched to device: ${targetDevice}`);
-  };
+    setRemoteVideoStream(null); // Clear any existing stream
+    
+    if (targetDevice) {
+      setIsLoadingRemoteVideo(true);
+      // Request video stream from the target device
+      peerNetwork.requestVideoFromPeer(targetDevice);
+      console.log(`Requesting video from device: ${targetDevice}`);
+    }
+  }, []);
+  
+  // Handle receiving remote video stream
+  useEffect(() => {
+    const unsubRemoteVideo = peerNetwork.on('remote-video', ({ peerId, stream }) => {
+      console.log('Received remote video from:', peerId);
+      if (peerId === activeViewDevice) {
+        setRemoteVideoStream(stream);
+        setIsLoadingRemoteVideo(false);
+      }
+    });
+    
+    const unsubVideoEnded = peerNetwork.on('video-ended', ({ peerId }) => {
+      if (peerId === activeViewDevice) {
+        setRemoteVideoStream(null);
+        setIsLoadingRemoteVideo(false);
+      }
+    });
+    
+    const unsubVideoError = peerNetwork.on('video-error', ({ peerId, error }) => {
+      console.error('Video error from', peerId, error);
+      if (peerId === activeViewDevice) {
+        setIsLoadingRemoteVideo(false);
+      }
+    });
+    
+    // Handle video request from host (when we are not the host)
+    const unsubVideoRequest = peerNetwork.on('video-request', async ({ peerId }) => {
+      console.log('Video requested by:', peerId);
+      // Start streaming our video to the requester
+      try {
+        // Get the video element from CameraView if it exists
+        const videoElement = document.querySelector('.camera-feed');
+        if (videoElement && videoElement.srcObject) {
+          // Use existing camera stream
+          await peerNetwork.startVideoStream(videoElement.srcObject);
+        } else {
+          // Start new video stream
+          await peerNetwork.startVideoStream();
+        }
+      } catch (err) {
+        console.error('Failed to start video stream:', err);
+      }
+    });
+    
+    return () => {
+      unsubRemoteVideo();
+      unsubVideoEnded();
+      unsubVideoError();
+      unsubVideoRequest();
+    };
+  }, [activeViewDevice]);
+  
+  // Attach remote video stream to video element
+  useEffect(() => {
+    if (remoteVideoRef.current && remoteVideoStream) {
+      remoteVideoRef.current.srcObject = remoteVideoStream;
+      remoteVideoRef.current.play().catch(err => {
+        console.error('Failed to play remote video:', err);
+      });
+    }
+  }, [remoteVideoStream]);
   
   // Handle grid view toggle
   const handleGridViewToggle = (enabled) => {
     setIsGridView(enabled);
     if (enabled) {
       setActiveViewDevice(null); // Clear specific device when enabling grid
+      setRemoteVideoStream(null); // Clear remote video when switching to grid
     }
     console.log(`Grid view: ${enabled ? 'enabled' : 'disabled'}`);
   };
+  
+  // Clear remote video when switching back to local view
+  const handleClearRemoteView = useCallback(() => {
+    setActiveViewDevice(null);
+    setRemoteVideoStream(null);
+    setIsLoadingRemoteVideo(false);
+  }, []);
   
   const handleBackClick = () => {
     // Exit animation with null check
@@ -178,7 +256,7 @@ function TrackingPage({ onBackToHome }) {
           <div className="camera-section-header">
             <h2 className="camera-section-title">
               <span className="camera-title-icon">◉</span>
-              OPTICAL FEED
+              {activeViewDevice ? 'REMOTE FEED' : 'OPTICAL FEED'}
               {activeViewDevice && (
                 <span className="remote-view-badge">
                   📡 Viewing: {activeViewDevice.slice(0, 10)}...
@@ -190,16 +268,51 @@ function TrackingPage({ onBackToHome }) {
                 </span>
               )}
             </h2>
-            <button className="btn-fullscreen" onClick={openFullScreen}>
-              <span className="fullscreen-icon">⛶</span>
-              <span>FULL SCAN</span>
-            </button>
+            <div className="camera-section-actions">
+              {activeViewDevice && (
+                <button className="btn-back-to-local" onClick={handleClearRemoteView}>
+                  <span>← Back to Local</span>
+                </button>
+              )}
+              <button className="btn-fullscreen" onClick={openFullScreen}>
+                <span className="fullscreen-icon">⛶</span>
+                <span>FULL SCAN</span>
+              </button>
+            </div>
           </div>
-          <CameraView 
-            onDetections={handleDetections}
-            onThreatLevel={handleThreatLevel}
-            isActive={isActive}
-          />
+          
+          {/* Show remote video when viewing another device */}
+          {activeViewDevice ? (
+            <div className="remote-video-container">
+              {isLoadingRemoteVideo && (
+                <div className="remote-video-loading">
+                  <div className="loading-spinner"></div>
+                  <p>Connecting to remote camera...</p>
+                </div>
+              )}
+              {remoteVideoStream ? (
+                <video
+                  ref={remoteVideoRef}
+                  className="remote-video-feed"
+                  autoPlay
+                  playsInline
+                  muted
+                />
+              ) : !isLoadingRemoteVideo && (
+                <div className="remote-video-waiting">
+                  <div className="waiting-icon">📡</div>
+                  <p>Waiting for remote feed...</p>
+                  <p className="hint">The remote device needs to have their camera active</p>
+                </div>
+              )}
+            </div>
+          ) : (
+            <CameraView 
+              onDetections={handleDetections}
+              onThreatLevel={handleThreatLevel}
+              isActive={isActive}
+            />
+          )}
         </section>
         
         <aside className="sidebar">

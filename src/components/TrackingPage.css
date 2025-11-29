@@ -101,6 +101,35 @@
   border-radius: 8px 8px 0 0;
 }
 
+.camera-section-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.btn-back-to-local {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 14px;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 4px;
+  color: #8b8f9a;
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.btn-back-to-local:hover {
+  background: rgba(255, 255, 255, 0.1);
+  border-color: #00d4ff;
+  color: #f0f2f5;
+}
+
 .camera-section-title {
   display: flex;
   align-items: center;
@@ -186,6 +215,75 @@
   font-size: 14px;
 }
 
+/* Remote Video Container */
+.remote-video-container {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  background: rgba(10, 11, 15, 0.9);
+  border: 1px solid rgba(0, 212, 255, 0.2);
+  border-top: none;
+  border-radius: 0 0 8px 8px;
+  min-height: 400px;
+  position: relative;
+  overflow: hidden;
+}
+
+.remote-video-feed {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  background: #0a0b0f;
+}
+
+.remote-video-loading,
+.remote-video-waiting {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 16px;
+  padding: 40px;
+  text-align: center;
+}
+
+.remote-video-loading .loading-spinner {
+  width: 48px;
+  height: 48px;
+  border: 3px solid rgba(0, 212, 255, 0.2);
+  border-top-color: #00d4ff;
+  border-radius: 50%;
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+.remote-video-loading p,
+.remote-video-waiting p {
+  color: #8b8f9a;
+  font-size: 14px;
+  margin: 0;
+}
+
+.remote-video-waiting .waiting-icon {
+  font-size: 48px;
+  animation: pulse 2s infinite;
+}
+
+@keyframes pulse {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.6; transform: scale(1.05); }
+}
+
+.remote-video-waiting .hint {
+  font-size: 12px;
+  color: #5a5d68;
+}
+
 .sidebar {
   display: flex;
   flex-direction: column;
@@ -268,8 +366,17 @@
     padding: 10px 12px;
   }
   
-  .btn-fullscreen {
+  .camera-section-actions {
     width: 100%;
+  }
+  
+  .btn-fullscreen {
+    flex: 1;
+    justify-content: center;
+  }
+  
+  .btn-back-to-local {
+    flex: 1;
     justify-content: center;
   }
 }
