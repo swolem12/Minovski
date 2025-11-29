@@ -45,7 +45,7 @@ function CameraView({ onDetections, onThreatLevel, isActive = true }) {
   const [zoomLevel, setZoomLevel] = useState(1);
   const [torchEnabled, setTorchEnabled] = useState(false);
   
-  // Initialize detection model (YOLOv8 preferred, COCO-SSD fallback)
+  // Initialize detection model (YOLOv8 preferred, COCO-SSD fallback, Demo fallback)
   useEffect(() => {
     async function loadModel() {
       try {
@@ -72,19 +72,33 @@ function CameraView({ onDetections, onThreatLevel, isActive = true }) {
           }
         }
         
-        // Fallback to COCO-SSD
-        setLoadingStatus('Loading TensorFlow.js COCO-SSD model...');
-        await tf.ready();
-        console.log('TensorFlow.js ready, backend:', tf.getBackend());
+        // Try COCO-SSD fallback
+        try {
+          setLoadingStatus('Loading TensorFlow.js COCO-SSD model...');
+          await tf.ready();
+          console.log('TensorFlow.js ready, backend:', tf.getBackend());
+          
+          const loadedModel = await cocoSsd.load({
+            base: 'lite_mobilenet_v2' // Lighter model for mobile
+          });
+          
+          setModel(loadedModel);
+          setModelType('coco-ssd');
+          console.log('COCO-SSD model loaded');
+          setIsLoading(false);
+          return;
+        } catch (cocoError) {
+          console.warn('COCO-SSD loading failed, falling back to demo mode:', cocoError);
+          setLoadingStatus('Using demo detection mode...');
+        }
         
-        const loadedModel = await cocoSsd.load({
-          base: 'lite_mobilenet_v2' // Lighter model for mobile
-        });
-        
-        setModel(loadedModel);
-        setModelType('coco-ssd');
-        console.log('COCO-SSD model loaded');
+        // Final fallback to demo detector
+        console.log('Using demo detector for demonstration purposes');
+        await demoDetector.load();
+        setModel(demoDetector);
+        setModelType('demo');
         setIsLoading(false);
+        
       } catch (err) {
         console.error('Error loading model:', err);
         setError('Failed to load detection model. Please refresh.');
@@ -324,6 +338,10 @@ function CameraView({ onDetections, onThreatLevel, isActive = true }) {
           // YOLOv8 via ONNX Runtime Web
           const predictions = await model.detect(video);
           classifiedDetections = model.classifyDetections(predictions);
+        } else if (modelType === 'demo') {
+          // Demo detector for demonstration
+          const predictions = model.detect(video);
+          classifiedDetections = model.classifyDetections(predictions);
         } else {
           // COCO-SSD via TensorFlow.js
           const predictions = await model.detect(video);
@@ -515,7 +533,7 @@ function CameraView({ onDetections, onThreatLevel, isActive = true }) {
             <span className="tracking-indicator"></span>
             <span>Tracking Active</span>
             <span className={`model-badge ${modelType}`}>
-              {modelType === 'yolov8' ? 'YOLOv8 ONNX' : 'COCO-SSD'}
+              {modelType === 'yolov8' ? 'YOLOv8 ONNX' : modelType === 'demo' ? 'DEMO MODE' : 'COCO-SSD'}
             </span>
           </div>
           

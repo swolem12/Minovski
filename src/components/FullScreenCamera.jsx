@@ -5,6 +5,7 @@ import { animate } from 'animejs';
 import FluidSimulation from '../utils/fluidSimulation';
 import { classifyDetections as classifyCocoDetections, getOverallThreatLevel, getTypeColor, getThreatColor, isAerialThreat, formatConfidence, estimateHandPositions, TRACKABLE_TYPES } from '../utils/objectClassifier';
 import { yolov8Detector } from '../utils/yolov8Detector';
+import { demoDetector } from '../utils/demoDetector';
 import audioAlert from '../utils/audioAlert';
 import './FullScreenCamera.css';
 
@@ -65,16 +66,31 @@ function FullScreenCamera({ onClose, onDetections, onThreatLevel }) {
           }
         }
         
-        setLoadingStatus('Initializing TensorFlow.js...');
-        await tf.ready();
+        // Try COCO-SSD
+        try {
+          setLoadingStatus('Initializing TensorFlow.js...');
+          await tf.ready();
+          
+          const loadedModel = await cocoSsd.load({
+            base: 'lite_mobilenet_v2'
+          });
+          
+          setModel(loadedModel);
+          setModelType('coco-ssd');
+          setIsLoading(false);
+          return;
+        } catch (cocoError) {
+          console.warn('COCO-SSD loading failed, falling back to demo mode:', cocoError);
+          setLoadingStatus('Using demo detection mode...');
+        }
         
-        const loadedModel = await cocoSsd.load({
-          base: 'lite_mobilenet_v2'
-        });
-        
-        setModel(loadedModel);
-        setModelType('coco-ssd');
+        // Final fallback to demo detector
+        console.log('Using demo detector for demonstration purposes');
+        await demoDetector.load();
+        setModel(demoDetector);
+        setModelType('demo');
         setIsLoading(false);
+        
       } catch (err) {
         console.error('Error loading model:', err);
         setError('Failed to load detection model');
@@ -295,6 +311,10 @@ function FullScreenCamera({ onClose, onDetections, onThreatLevel }) {
         
         if (modelType === 'yolov8') {
           const predictions = await model.detect(video);
+          classifiedDetections = model.classifyDetections(predictions);
+        } else if (modelType === 'demo') {
+          // Demo detector for demonstration
+          const predictions = model.detect(video);
           classifiedDetections = model.classifyDetections(predictions);
         } else {
           const predictions = await model.detect(video);
@@ -546,7 +566,7 @@ function FullScreenCamera({ onClose, onDetections, onThreatLevel }) {
               {new Date().toLocaleTimeString('en-US', { hour12: false })}
             </div>
             <div className="fs-hud-model">
-              {modelType === 'yolov8' ? 'YOLOV8 ONNX' : 'COCO-SSD'} ACTIVE
+              {modelType === 'yolov8' ? 'YOLOV8 ONNX' : modelType === 'demo' ? 'DEMO MODE' : 'COCO-SSD'} ACTIVE
             </div>
           </div>
           

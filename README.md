@@ -105,41 +105,68 @@ This is a prototype/demonstration application. For optimal drone detection, trai
 
 ## 🎓 Drone Detection Training Resources
 
-For better drone detection accuracy, you can train a custom YOLO model using these open-source datasets:
+For better drone detection accuracy, you can train a custom YOLO model using these forked datasets:
 
-### Recommended Datasets
+### Your Forked Datasets (Ready to Use!)
 
-| Dataset | Description | Size | Link |
-|---------|-------------|------|------|
-| **Seraphim Drone Detection Dataset** | Curated collection of 83,000+ drone images in YOLO format from 23 open-source datasets. Ideal for training robust detection models. | 83,483 images | [HuggingFace](https://huggingface.co/datasets/lgrzybowski/seraphim-drone-detection-dataset) / [GitHub](https://github.com/Seraphim-Defence-Systems/seraphim-drone-detection-dataset) |
-| **Drone Detection YOLOv11x** | Pre-trained YOLOv11x weights for drone detection with 90.5% mAP@50. Includes heatmap visualization. | 1,359 images | [GitHub](https://github.com/doguilmak/Drone-Detection-YOLOv11x) / [HuggingFace Weights](https://huggingface.co/doguilmak/Drone-Detection-YOLOv11x) |
-| **Military Drone Detection** | Detects Shahed-136, Lancet, Orlan-10, and other military UAVs with 94.8% mAP50. | Synthetic data | [GitHub](https://github.com/takzen/yolo-military-drone-detection) |
-| **Drone Detection Dataset** | Labeled drone images from Kaggle and Mendeley sources for diverse training. | Various | [GitHub](https://github.com/tarlanahad/drone-detection-dataset) |
+| Dataset | Description | Size | Your Fork |
+|---------|-------------|------|-----------|
+| **Seraphim Drone Detection** | 83,000+ drone images in YOLO format from 23 sources | 83,483 images | [swolem12/seraphim-drone-detection-dataset](https://github.com/swolem12/seraphim-drone-detection-dataset) |
+| **Drone-Detection-YOLOv8x** | YOLOv8 model + dataset for real-time drone detection | 1,359 images | [swolem12/Drone-Detection-YOLOv8x](https://github.com/swolem12/Drone-Detection-YOLOv8x) |
+| **drone-net** | YOLOv3 drone detection with pre-trained weights | Dataset + weights | [swolem12/drone-net](https://github.com/swolem12/drone-net) |
 
-### Training Your Own Model
+### Quick Start: Training Your Own Model
 
 ```bash
-# Install Ultralytics YOLO
+# 1. Clone your forked dataset
+git clone https://github.com/swolem12/seraphim-drone-detection-dataset.git
+cd seraphim-drone-detection-dataset
+
+# 2. Install Ultralytics YOLO
 pip install ultralytics
 
-# Download a drone dataset (example using Seraphim dataset)
-# wget https://huggingface.co/datasets/lgrzybowski/seraphim-drone-detection-dataset/resolve/main/data.zip
+# 3. Train YOLOv8 on the drone dataset
+yolo detect train data=data.yaml model=yolov8n.pt epochs=100 imgsz=640
 
-# Train YOLOv8 on drone dataset
-yolo detect train data=drone_dataset/data.yaml model=yolov8n.pt epochs=100 imgsz=640
-
-# Export to ONNX for browser use
+# 4. Export to ONNX for browser use
 yolo export model=runs/detect/train/weights/best.pt format=onnx imgsz=640 simplify=True
 
-# Copy to Minovski public folder
-cp runs/detect/train/weights/best.onnx public/models/yolov8n.onnx
+# 5. Copy to Minovski public folder
+cp runs/detect/train/weights/best.onnx /path/to/Minovski/public/models/yolov8n.onnx
 ```
 
-### Using Pre-trained Drone Weights
+### Using Pre-trained Weights from drone-net
 
-You can download pre-trained drone detection weights from:
-- [Drone-Detection-YOLOv11x](https://huggingface.co/doguilmak/Drone-Detection-YOLOv11x/tree/main/weight)
-- Convert to ONNX format and place in `public/models/` directory
+```bash
+# Clone your forked drone-net repo (has pre-trained YOLOv3 weights)
+git clone https://github.com/swolem12/drone-net.git
+cd drone-net
+
+# The repo includes pre-trained weights - convert to ONNX
+# See the repo README for detailed instructions
+```
+
+### Using YOLOv8x Pre-trained Model
+
+```bash
+# Clone your forked YOLOv8x repo
+git clone https://github.com/swolem12/Drone-Detection-YOLOv8x.git
+cd Drone-Detection-YOLOv8x
+
+# The repo includes trained weights - export to ONNX
+yolo export model=best.pt format=onnx imgsz=640 simplify=True
+
+# Copy to Minovski
+cp best.onnx /path/to/Minovski/public/models/yolov8n.onnx
+```
+
+### Additional Resources
+
+| Dataset | Description | Link |
+|---------|-------------|------|
+| **Drone Detection YOLOv11x** | Latest YOLOv11 with 90.5% mAP@50 | [GitHub](https://github.com/doguilmak/Drone-Detection-YOLOv11x) |
+| **Military Drone Detection** | Shahed-136, Lancet, Orlan-10 with 94.8% mAP50 | [GitHub](https://github.com/takzen/yolo-military-drone-detection) |
+| **VisDrone Dataset** | Large-scale drone detection benchmark | [GitHub](https://github.com/VisDrone/VisDrone-Dataset) |
 
 ## 📜 License
 

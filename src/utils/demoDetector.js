@@ -4,12 +4,14 @@
  */
 
 // Demo detection classes with drone-specific detections
+// Note: In demo mode, we simulate various aerial threat detections
+// 'bird' is mapped to 'drone' because COCO models use birds as proxy for drones
 const DEMO_CLASSES = [
   { class: 'drone', type: 'drone', threat: 'high', label: 'Quadcopter Drone' },
   { class: 'drone', type: 'drone', threat: 'medium', label: 'Small sUAS' },
   { class: 'fixed-wing', type: 'fixed-wing', threat: 'high', label: 'Fixed-Wing UAV' },
   { class: 'helicopter', type: 'helicopter', threat: 'high', label: 'Helicopter' },
-  { class: 'bird', type: 'drone', threat: 'medium', label: 'Possible sUAS' },
+  { class: 'bird', type: 'drone', threat: 'medium', label: 'Possible sUAS' }, // Birds used as drone proxy
   { class: 'person', type: 'person', threat: 'info', label: 'Person Detected' },
   { class: 'car', type: 'vehicle', threat: 'low', label: 'Ground Vehicle' },
 ];
