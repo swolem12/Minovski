@@ -81,7 +81,7 @@ class PeerNetwork {
                 credential: 'openrelayproject'
               }
             ],
-            // Enable ICE candidate trickling for faster connection establishment
+            // Pre-gather ICE candidates for faster connection establishment
             iceCandidatePoolSize: 10
           }
         });
