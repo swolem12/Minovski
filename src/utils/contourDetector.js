@@ -140,8 +140,8 @@ export function extractContours(source, boundingBox, threshold = 50) {
     cv.dilate(edges, dilated, dilateKernel, new cv.Point(-1, -1), 1);
     dilateKernel.delete();
     
-    // Find contours - use RETR_LIST to get all contours
-    cv.findContours(dilated, contours, hierarchy, cv.RETR_LIST, cv.CHAIN_APPROX_TC89_L1);
+    // Find contours - use RETR_LIST to get all contours with simple approximation
+    cv.findContours(dilated, contours, hierarchy, cv.RETR_LIST, cv.CHAIN_APPROX_SIMPLE);
     
     // Find largest contour by area (main object)
     let largestContourIndex = -1;
@@ -234,18 +234,18 @@ export function drawContour(ctx, contourPoints, color, lineWidth = 2, glow = tru
       ctx.lineTo(points[i].x, points[i].y);
     }
   } else {
-    // Use smooth curves through points
+    // Use smooth curves through points using Catmull-Rom to Bezier conversion
     // Start from first point
     ctx.moveTo(points[0].x, points[0].y);
     
-    // Draw smooth curves through all points
+    // Draw smooth curves through all points (start from 0 since we're using modular indexing)
     for (let i = 0; i < n; i++) {
       const p0 = points[(i - 1 + n) % n];
       const p1 = points[i];
       const p2 = points[(i + 1) % n];
       const p3 = points[(i + 2) % n];
       
-      // Calculate control points for smooth curve
+      // Calculate control points for smooth curve (Catmull-Rom spline)
       const cp1x = p1.x + (p2.x - p0.x) / 6;
       const cp1y = p1.y + (p2.y - p0.y) / 6;
       const cp2x = p2.x - (p3.x - p1.x) / 6;
@@ -290,10 +290,10 @@ export function drawFallbackOutline(ctx, boundingBox, color, lineWidth = 2) {
   // This creates a more natural "contour-like" appearance
   ctx.beginPath();
   
-  const numPoints = 24; // More points for smoother curve
+  const numPoints = 24; // Points for smooth curve
   const variance = 0.08; // Slight variance for organic feel
   
-  for (let i = 0; i <= numPoints; i++) {
+  for (let i = 0; i < numPoints; i++) {
     const angle = (i / numPoints) * Math.PI * 2;
     
     // Add slight variation to make it look more organic
