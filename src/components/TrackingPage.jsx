@@ -98,15 +98,19 @@ function TrackingPage({ onBackToHome }) {
   ).length + remoteDetections.reduce((acc, rd) => acc + (rd.detection.threats?.length || 0), 0);
   
   const handleBackClick = () => {
-    // Exit animation
-    animate(containerRef.current, {
-      opacity: [1, 0],
-      translateY: [0, 20],
-      duration: 300,
-      ease: 'inQuad'
-    }).then(() => {
+    // Exit animation with null check
+    if (containerRef.current) {
+      animate(containerRef.current, {
+        opacity: [1, 0],
+        translateY: [0, 20],
+        duration: 300,
+        ease: 'inQuad'
+      }).then(() => {
+        onBackToHome();
+      });
+    } else {
       onBackToHome();
-    });
+    }
   };
 
   return (

@@ -5,7 +5,6 @@ import './LandingPage.css';
 function LandingPage({ onStartTracking }) {
   const containerRef = useRef(null);
   const logoRef = useRef(null);
-  const featuresRef = useRef(null);
   
   // Pre-generate stable particle positions
   const particles = useMemo(() => {
@@ -59,15 +58,19 @@ function LandingPage({ onStartTracking }) {
   }, []);
   
   const handleStartClick = () => {
-    // Exit animation
-    animate(containerRef.current, {
-      opacity: [1, 0],
-      translateY: [0, -20],
-      duration: 400,
-      ease: 'inQuad'
-    }).then(() => {
+    // Exit animation with null check
+    if (containerRef.current) {
+      animate(containerRef.current, {
+        opacity: [1, 0],
+        translateY: [0, -20],
+        duration: 400,
+        ease: 'inQuad'
+      }).then(() => {
+        onStartTracking();
+      });
+    } else {
       onStartTracking();
-    });
+    }
   };
 
   return (
@@ -103,27 +106,27 @@ function LandingPage({ onStartTracking }) {
       </section>
       
       {/* Features Section */}
-      <section className="features-section" ref={featuresRef}>
+      <section className="features-section">
         <div className="feature-card">
-          <span className="feature-icon">🎯</span>
+          <span className="feature-icon" aria-hidden="true">🎯</span>
           <h3>Real-Time Detection</h3>
           <p>YOLOv8 AI detects drones, aircraft, and aerial objects instantly</p>
         </div>
         
         <div className="feature-card">
-          <span className="feature-icon">🌐</span>
+          <span className="feature-icon" aria-hidden="true">🌐</span>
           <h3>Sensor Network</h3>
           <p>Connect multiple devices to create a distributed detection network</p>
         </div>
         
         <div className="feature-card">
-          <span className="feature-icon">🔔</span>
+          <span className="feature-icon" aria-hidden="true">🔔</span>
           <h3>Threat Alerts</h3>
           <p>Audio and haptic notifications when threats are detected</p>
         </div>
         
         <div className="feature-card">
-          <span className="feature-icon">✨</span>
+          <span className="feature-icon" aria-hidden="true">✨</span>
           <h3>Particle Trails</h3>
           <p>Visual tracking with Minovsky particle effect technology</p>
         </div>
@@ -135,13 +138,13 @@ function LandingPage({ onStartTracking }) {
           className="btn-start-tracking-main"
           onClick={handleStartClick}
         >
-          <span className="btn-icon-main">📡</span>
+          <span className="btn-icon-main" aria-hidden="true">📡</span>
           <span className="btn-text-main">Start Tracking</span>
           <span className="btn-subtitle-main">Begin Aerial Threat Detection</span>
         </button>
         
         <p className="privacy-notice">
-          🔒 All processing happens locally on your device. No data is sent externally.
+          <span aria-hidden="true">🔒</span> All processing happens locally on your device. No data is sent externally.
         </p>
       </section>
       
