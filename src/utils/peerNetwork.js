@@ -8,7 +8,13 @@ import { v4 as uuidv4 } from 'uuid';
 
 // Connection timeout in milliseconds - increased to allow for NAT traversal via TURN servers
 // TURN relay connections across different networks can take longer to establish
-const CONNECTION_TIMEOUT_MS = 30000;
+const CONNECTION_TIMEOUT_MS = 45000;
+
+// Maximum number of connection retry attempts
+const MAX_RETRY_ATTEMPTS = 3;
+
+// Base delay for exponential backoff (ms)
+const RETRY_BASE_DELAY_MS = 2000;
 
 class PeerNetwork {
   constructor() {
@@ -21,6 +27,8 @@ class PeerNetwork {
     // Audio/media call support
     this.mediaConnections = new Map();
     this.localAudioStream = null;
+    // Connection retry state
+    this.retryAttempts = 0;
   }
   
   /**
@@ -36,6 +44,72 @@ class PeerNetwork {
   }
   
   /**
+   * Get ICE servers configuration with multiple TURN providers for redundancy
+   */
+  getIceServers() {
+    return [
+      // === STUN Servers (for discovering public IP) ===
+      { urls: 'stun:stun.l.google.com:19302' },
+      { urls: 'stun:stun1.l.google.com:19302' },
+      { urls: 'stun:stun2.l.google.com:19302' },
+      { urls: 'stun:stun3.l.google.com:19302' },
+      { urls: 'stun:stun4.l.google.com:19302' },
+      // OpenRelay STUN
+      { urls: 'stun:openrelay.metered.ca:80' },
+      // Additional STUN for redundancy
+      { urls: 'stun:stun.stunprotocol.org:3478' },
+      
+      // === TURN Servers (for NAT traversal across different networks) ===
+      // Free public TURN servers from OpenRelay (metered.ca)
+      // These are intentionally public credentials provided for open-source projects
+      // TURN credentials must be client-accessible for WebRTC - the service has rate limiting
+      
+      // OpenRelay TURN - UDP on port 80 (commonly allowed through firewalls)
+      {
+        urls: 'turn:openrelay.metered.ca:80',
+        username: 'openrelayproject',
+        credential: 'openrelayproject'
+      },
+      // OpenRelay TURN - UDP on port 443
+      {
+        urls: 'turn:openrelay.metered.ca:443',
+        username: 'openrelayproject',
+        credential: 'openrelayproject'
+      },
+      // OpenRelay TURN - TCP on port 443 (for restrictive firewalls that block UDP)
+      {
+        urls: 'turn:openrelay.metered.ca:443?transport=tcp',
+        username: 'openrelayproject',
+        credential: 'openrelayproject'
+      },
+      // OpenRelay TURNS (TLS) for most restrictive networks - appears as normal HTTPS traffic
+      {
+        urls: 'turns:openrelay.metered.ca:443',
+        username: 'openrelayproject',
+        credential: 'openrelayproject'
+      },
+      
+      // Additional backup TURN servers for redundancy
+      // Relay server on standard ports for broader compatibility
+      {
+        urls: 'turn:relay.metered.ca:80',
+        username: 'openrelayproject',
+        credential: 'openrelayproject'
+      },
+      {
+        urls: 'turn:relay.metered.ca:443',
+        username: 'openrelayproject',
+        credential: 'openrelayproject'
+      },
+      {
+        urls: 'turn:relay.metered.ca:443?transport=tcp',
+        username: 'openrelayproject',
+        credential: 'openrelayproject'
+      }
+    ];
+  }
+  
+  /**
    * Initialize peer connection
    */
   async init() {
@@ -44,45 +118,11 @@ class PeerNetwork {
         this.peer = new Peer(this.deviceId, {
           debug: 1,
           config: {
-            iceServers: [
-              // STUN servers for discovering public IP
-              { urls: 'stun:stun.l.google.com:19302' },
-              { urls: 'stun:stun1.l.google.com:19302' },
-              { urls: 'stun:stun2.l.google.com:19302' },
-              { urls: 'stun:stun3.l.google.com:19302' },
-              { urls: 'stun:stun4.l.google.com:19302' },
-              // OpenRelay STUN servers
-              { urls: 'stun:openrelay.metered.ca:80' },
-              // Free public TURN servers from OpenRelay for NAT traversal across different networks
-              // These are intentionally public credentials provided by OpenRelay (metered.ca) for open-source projects
-              // TURN credentials must be client-accessible for WebRTC - the service has rate limiting
-              // UDP transport on port 80 (commonly allowed through firewalls)
-              {
-                urls: 'turn:openrelay.metered.ca:80',
-                username: 'openrelayproject',
-                credential: 'openrelayproject'
-              },
-              // UDP transport on port 443
-              {
-                urls: 'turn:openrelay.metered.ca:443',
-                username: 'openrelayproject',
-                credential: 'openrelayproject'
-              },
-              // TCP transport on port 443 (for restrictive firewalls that block UDP)
-              {
-                urls: 'turn:openrelay.metered.ca:443?transport=tcp',
-                username: 'openrelayproject',
-                credential: 'openrelayproject'
-              },
-              // TURNS (TLS) for most restrictive networks - appears as normal HTTPS traffic
-              {
-                urls: 'turns:openrelay.metered.ca:443',
-                username: 'openrelayproject',
-                credential: 'openrelayproject'
-              }
-            ],
+            iceServers: this.getIceServers(),
             // Pre-gather ICE candidates for faster connection establishment
-            iceCandidatePoolSize: 10
+            iceCandidatePoolSize: 10,
+            // Enable aggressive ICE for better connectivity
+            iceTransportPolicy: 'all'
           }
         });
         
@@ -137,10 +177,11 @@ class PeerNetwork {
   }
   
   /**
-   * Join an existing room
+   * Join an existing room with automatic retry on failure
    * @param {string} hostId - Host's device ID
+   * @param {number} attempt - Current attempt number (used internally for retries)
    */
-  async joinRoom(hostId) {
+  async joinRoom(hostId, attempt = 1) {
     return new Promise((resolve, reject) => {
       // Check if peer is initialized
       if (!this.peer || this.peer.destroyed) {
@@ -153,6 +194,14 @@ class PeerNetwork {
         reject(new Error('Peer is disconnected. Please refresh and try again.'));
         return;
       }
+      
+      // Emit connection progress event
+      this.emit('connection-progress', { 
+        status: 'connecting', 
+        attempt, 
+        maxAttempts: MAX_RETRY_ATTEMPTS,
+        message: attempt > 1 ? `Retrying connection (attempt ${attempt}/${MAX_RETRY_ATTEMPTS})...` : 'Establishing connection...'
+      });
       
       const conn = this.peer.connect(hostId, {
         reliable: true,
@@ -168,11 +217,35 @@ class PeerNetwork {
       // Set a timeout for connection attempt
       // Note: Cross-network connections via TURN may take longer to establish
       const connectionTimeout = setTimeout(() => {
-        reject(new Error('Connection timeout. The host may be offline, or firewall/network restrictions are preventing the connection. Both devices need internet access for cross-network connections.'));
+        // If we haven't exhausted retries, try again
+        if (attempt < MAX_RETRY_ATTEMPTS) {
+          this.emit('connection-progress', { 
+            status: 'retrying', 
+            attempt: attempt + 1, 
+            maxAttempts: MAX_RETRY_ATTEMPTS,
+            message: `Connection timed out. Retrying (attempt ${attempt + 1}/${MAX_RETRY_ATTEMPTS})...`
+          });
+          
+          // Exponential backoff: 2s, 4s, 8s...
+          const delay = RETRY_BASE_DELAY_MS * Math.pow(2, attempt - 1);
+          setTimeout(() => {
+            this.joinRoom(hostId, attempt + 1).then(resolve).catch(reject);
+          }, delay);
+        } else {
+          // All retries exhausted
+          const errorMessage = this.getDetailedConnectionError();
+          reject(new Error(errorMessage));
+        }
       }, CONNECTION_TIMEOUT_MS);
       
       conn.on('open', () => {
         clearTimeout(connectionTimeout);
+        this.retryAttempts = 0; // Reset retry counter on success
+        this.emit('connection-progress', { 
+          status: 'connected', 
+          attempt,
+          message: 'Successfully connected!'
+        });
         this.handleConnection(conn);
         this.roomId = hostId;
         resolve(conn);
@@ -185,6 +258,26 @@ class PeerNetwork {
     });
   }
   
+  /**
+   * Generate a detailed error message with troubleshooting tips
+   */
+  getDetailedConnectionError() {
+    return `Connection failed after ${MAX_RETRY_ATTEMPTS} attempts.
+
+Troubleshooting tips:
+• Verify the Device ID is correct (copy-paste recommended)
+• Ensure the host device is still online and has the app open
+• Check that both devices have internet access
+• If on different networks (e.g., home WiFi vs mobile data), the connection requires TURN relay servers
+• Try disabling VPN if connected through one
+• Some corporate/school networks may block peer-to-peer connections
+
+If problems persist, try:
+1. Both devices refresh the page
+2. Host creates a new network
+3. Connect while both on the same WiFi (for testing)`;
+  }
+
   /**
    * Handle incoming connection
    */
