@@ -103,18 +103,43 @@ class PeerNetwork {
    */
   async joinRoom(hostId) {
     return new Promise((resolve, reject) => {
+      // Check if peer is initialized
+      if (!this.peer || this.peer.destroyed) {
+        reject(new Error('Peer not initialized. Please wait for connection.'));
+        return;
+      }
+      
+      // Check if peer is open/ready
+      if (this.peer.disconnected) {
+        reject(new Error('Peer is disconnected. Please refresh and try again.'));
+        return;
+      }
+      
       const conn = this.peer.connect(hostId, {
         reliable: true,
         metadata: { deviceId: this.deviceId }
       });
       
+      // Check if connection was created
+      if (!conn) {
+        reject(new Error('Failed to create connection. Please try again.'));
+        return;
+      }
+      
+      // Set a timeout for connection attempt
+      const connectionTimeout = setTimeout(() => {
+        reject(new Error('Connection timeout. Host may be offline or unreachable.'));
+      }, 10000); // 10 second timeout
+      
       conn.on('open', () => {
+        clearTimeout(connectionTimeout);
         this.handleConnection(conn);
         this.roomId = hostId;
         resolve(conn);
       });
       
       conn.on('error', (err) => {
+        clearTimeout(connectionTimeout);
         reject(err);
       });
     });
@@ -125,9 +150,14 @@ class PeerNetwork {
    */
   handleConnection(conn) {
     const peerId = conn.peer;
+    let isSetupComplete = false;
     
     // Helper to set up the connection once it's open
     const setupConnection = () => {
+      // Prevent duplicate setup due to race condition
+      if (isSetupComplete) return;
+      isSetupComplete = true;
+      
       this.connections.set(peerId, conn);
       console.log('Connection established with:', peerId);
       this.emit('peer-connected', { peerId, connection: conn });
@@ -142,12 +172,13 @@ class PeerNetwork {
       });
     };
     
+    // Always register the 'open' event listener first to avoid race conditions
+    conn.on('open', setupConnection);
+    
     // If connection is already open, set it up immediately
-    // Otherwise, wait for the 'open' event
+    // The flag prevents duplicate setup if the event also fires
     if (conn.open) {
       setupConnection();
-    } else {
-      conn.on('open', setupConnection);
     }
     
     conn.on('data', (data) => {

@@ -14,6 +14,8 @@ function NetworkPanel({ onRemoteDetection, onViewSwitch, onGridViewToggle }) {
   const [isHost, setIsHost] = useState(false);
   const [activeViewDevice, setActiveViewDevice] = useState(null);
   const [isGridView, setIsGridView] = useState(false);
+  const [joinError, setJoinError] = useState('');
+  const [isJoining, setIsJoining] = useState(false);
   const panelRef = useRef(null);
   const alertsRef = useRef(null);
   
@@ -100,6 +102,15 @@ function NetworkPanel({ onRemoteDetection, onViewSwitch, onGridViewToggle }) {
   const handleJoinRoom = async () => {
     if (!joinRoomId.trim()) return;
     
+    // Check if network is connected first
+    if (!isConnected) {
+      setJoinError('Network not ready. Please wait...');
+      return;
+    }
+    
+    setIsJoining(true);
+    setJoinError('');
+    
     try {
       await peerNetwork.joinRoom(joinRoomId.trim());
       setRoomId(joinRoomId.trim());
@@ -114,6 +125,7 @@ function NetworkPanel({ onRemoteDetection, onViewSwitch, onGridViewToggle }) {
       }
     } catch (err) {
       console.error('Failed to join room:', err);
+      setJoinError(err.message || 'Failed to connect. Check the Device ID and try again.');
       if (panelRef.current) {
         animate(panelRef.current, {
           backgroundColor: ['rgba(239, 68, 68, 0.2)', 'rgba(15, 15, 15, 0.95)'],
@@ -121,6 +133,8 @@ function NetworkPanel({ onRemoteDetection, onViewSwitch, onGridViewToggle }) {
           ease: 'outQuad'
         });
       }
+    } finally {
+      setIsJoining(false);
     }
   };
   
@@ -226,6 +240,7 @@ function NetworkPanel({ onRemoteDetection, onViewSwitch, onGridViewToggle }) {
                 <button 
                   className="btn-create-room"
                   onClick={handleCreateRoom}
+                  disabled={!isConnected}
                 >
                   Create Sensor Network
                 </button>
@@ -237,15 +252,23 @@ function NetworkPanel({ onRemoteDetection, onViewSwitch, onGridViewToggle }) {
                     type="text"
                     placeholder="Enter Device ID to connect"
                     value={joinRoomId}
-                    onChange={(e) => setJoinRoomId(e.target.value)}
+                    onChange={(e) => {
+                      setJoinRoomId(e.target.value);
+                      setJoinError(''); // Clear error when typing
+                    }}
+                    disabled={isJoining}
                   />
                   <button 
                     className="btn-join"
                     onClick={handleJoinRoom}
+                    disabled={!isConnected || isJoining || !joinRoomId.trim()}
                   >
-                    Join
+                    {isJoining ? 'Joining...' : 'Join'}
                   </button>
                 </div>
+                {joinError && (
+                  <p className="join-error">{joinError}</p>
+                )}
               </>
             ) : (
               <div className="room-active">
