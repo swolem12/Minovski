@@ -234,12 +234,13 @@ class PeerNetwork {
    * @param {string} message - Chat message text
    */
   broadcastChatMessage(message) {
+    const timestamp = Date.now();
     const chatData = {
       type: 'chat-message',
       data: {
         message,
         sourceDevice: this.deviceId,
-        timestamp: Date.now()
+        timestamp
       }
     };
     this.broadcast(chatData);
@@ -247,7 +248,7 @@ class PeerNetwork {
     this.emit('chat-message', { 
       peerId: this.deviceId, 
       message, 
-      timestamp: Date.now(),
+      timestamp,
       isLocal: true 
     });
   }

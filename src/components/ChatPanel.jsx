@@ -25,7 +25,7 @@ function ChatPanel() {
   useEffect(() => {
     const unsubChatMessage = peerNetwork.on('chat-message', ({ peerId, message, timestamp, isLocal }) => {
       setMessages(prev => [
-        ...prev.slice(-49), // Keep last 50 messages
+        ...prev.slice(-49), // Keep last 50 messages (49 old + 1 new)
         {
           id: `${peerId}-${timestamp}`,
           peerId,

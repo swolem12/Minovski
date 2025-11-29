@@ -5,6 +5,7 @@ import { animate } from 'animejs';
 import FluidSimulation from '../utils/fluidSimulation';
 import { classifyDetections as classifyCocoDetections, getOverallThreatLevel, isAerialThreat, estimateHandPositions, TRACKABLE_TYPES } from '../utils/objectClassifier';
 import { yolov8Detector } from '../utils/yolov8Detector';
+import { demoDetector } from '../utils/demoDetector';
 import audioAlert from '../utils/audioAlert';
 import './CameraView.css';
 
