@@ -27,8 +27,6 @@ class PeerNetwork {
     // Audio/media call support
     this.mediaConnections = new Map();
     this.localAudioStream = null;
-    // Connection retry state
-    this.retryAttempts = 0;
   }
   
   /**
@@ -240,7 +238,6 @@ class PeerNetwork {
       
       conn.on('open', () => {
         clearTimeout(connectionTimeout);
-        this.retryAttempts = 0; // Reset retry counter on success
         this.emit('connection-progress', { 
           status: 'connected', 
           attempt,

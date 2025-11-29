@@ -285,9 +285,7 @@ function NetworkPanel({ onRemoteDetection, onViewSwitch, onGridViewToggle }) {
                   </p>
                 )}
                 {joinError && (
-                  <div className="join-error-container">
-                    <p className="join-error">{joinError}</p>
-                  </div>
+                  <p className="join-error">{joinError}</p>
                 )}
               </>
             ) : (
