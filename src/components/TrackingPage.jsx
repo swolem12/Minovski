@@ -4,6 +4,7 @@ import CameraView from './CameraView';
 import ThreatDisplay from './ThreatDisplay';
 import NetworkPanel from './NetworkPanel';
 import ChatPanel from './ChatPanel';
+import WalkieTalkie from './WalkieTalkie';
 import FullScreenCamera from './FullScreenCamera';
 import peerNetwork from '../utils/peerNetwork';
 import audioAlert from '../utils/audioAlert';
@@ -17,6 +18,7 @@ function TrackingPage({ onBackToHome }) {
   const [isActive] = useState(true);
   const [isFullScreen, setIsFullScreen] = useState(false);
   const [activeViewDevice, setActiveViewDevice] = useState(null);
+  const [isGridView, setIsGridView] = useState(false);
   const containerRef = useRef(null);
   const headerRef = useRef(null);
   
@@ -101,8 +103,18 @@ function TrackingPage({ onBackToHome }) {
   // Handle view switch from host
   const handleViewSwitch = ({ targetDevice }) => {
     setActiveViewDevice(targetDevice);
+    setIsGridView(false); // Disable grid view when switching to specific device
     // Notify user about view switch
     console.log(`View switched to device: ${targetDevice}`);
+  };
+  
+  // Handle grid view toggle
+  const handleGridViewToggle = (enabled) => {
+    setIsGridView(enabled);
+    if (enabled) {
+      setActiveViewDevice(null); // Clear specific device when enabling grid
+    }
+    console.log(`Grid view: ${enabled ? 'enabled' : 'disabled'}`);
   };
   
   const handleBackClick = () => {
@@ -172,6 +184,11 @@ function TrackingPage({ onBackToHome }) {
                   📡 Viewing: {activeViewDevice.slice(0, 10)}...
                 </span>
               )}
+              {isGridView && (
+                <span className="grid-view-badge">
+                  ⊞ Grid View Active
+                </span>
+              )}
             </h2>
             <button className="btn-fullscreen" onClick={openFullScreen}>
               <span className="fullscreen-icon">⛶</span>
@@ -194,7 +211,10 @@ function TrackingPage({ onBackToHome }) {
           <NetworkPanel 
             onRemoteDetection={handleRemoteDetection}
             onViewSwitch={handleViewSwitch}
+            onGridViewToggle={handleGridViewToggle}
           />
+          
+          <WalkieTalkie />
           
           <ChatPanel />
           

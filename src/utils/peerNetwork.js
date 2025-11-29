@@ -14,6 +14,9 @@ class PeerNetwork {
     this.listeners = new Map();
     this.isHost = false;
     this.roomId = null;
+    // Audio/media call support
+    this.mediaConnections = new Map();
+    this.localAudioStream = null;
   }
   
   /**
@@ -71,6 +74,11 @@ class PeerNetwork {
           console.log('Peer disconnected, reconnecting...');
           this.emit('disconnected');
           this.peer.reconnect();
+        });
+        
+        // Handle incoming audio/media calls
+        this.peer.on('call', (call) => {
+          this.handleIncomingCall(call);
         });
         
       } catch (e) {
@@ -175,6 +183,10 @@ class PeerNetwork {
         // Chat message from a peer
         this.emit('chat-message', { peerId, message: data.message, timestamp: data.timestamp });
         break;
+      case 'walkie-status':
+        // Walkie-talkie push-to-talk status
+        this.emit('walkie-status', { peerId, isActive: data.isActive, timestamp: data.timestamp });
+        break;
       default:
         this.emit('message', { peerId, type, data });
     }
@@ -250,6 +262,130 @@ class PeerNetwork {
       message, 
       timestamp,
       isLocal: true 
+    });
+  }
+  
+  /**
+   * Handle incoming audio/video call
+   */
+  handleIncomingCall(call) {
+    const peerId = call.peer;
+    console.log('Incoming call from:', peerId);
+    
+    // Answer the call - if we have a local stream, share it; otherwise answer without stream
+    // PeerJS handles the case where answer() is called without a stream
+    if (this.localAudioStream) {
+      call.answer(this.localAudioStream);
+    } else {
+      // Answer without stream - we'll add our stream later when user starts talking
+      call.answer();
+    }
+    
+    call.on('stream', (remoteStream) => {
+      console.log('Received remote audio stream from:', peerId);
+      this.emit('remote-audio', { peerId, stream: remoteStream });
+    });
+    
+    call.on('close', () => {
+      console.log('Call closed with:', peerId);
+      this.mediaConnections.delete(peerId);
+      this.emit('audio-ended', { peerId });
+    });
+    
+    call.on('error', (err) => {
+      console.error('Call error with', peerId, err);
+      this.emit('audio-error', { peerId, error: err });
+    });
+    
+    this.mediaConnections.set(peerId, call);
+  }
+  
+  /**
+   * Start push-to-talk audio broadcast
+   * @returns {Promise<MediaStream>} The local audio stream
+   */
+  async startAudioBroadcast() {
+    try {
+      // Get audio stream from microphone with quality constraints
+      this.localAudioStream = await navigator.mediaDevices.getUserMedia({
+        audio: {
+          echoCancellation: true,
+          noiseSuppression: true,
+          autoGainControl: true,
+          sampleRate: 48000,
+          channelCount: 1
+        },
+        video: false
+      });
+      
+      // Call all connected peers with the audio stream
+      for (const peerId of this.connections.keys()) {
+        this.callPeerWithAudio(peerId);
+      }
+      
+      this.emit('audio-started', { deviceId: this.deviceId });
+      return this.localAudioStream;
+    } catch (err) {
+      console.error('Failed to get audio stream:', err);
+      this.emit('audio-error', { error: err });
+      throw err;
+    }
+  }
+  
+  /**
+   * Call a specific peer with audio
+   */
+  callPeerWithAudio(peerId) {
+    if (!this.peer || !this.localAudioStream) return;
+    
+    const call = this.peer.call(peerId, this.localAudioStream);
+    if (!call) return;
+    
+    call.on('stream', (remoteStream) => {
+      this.emit('remote-audio', { peerId, stream: remoteStream });
+    });
+    
+    call.on('close', () => {
+      this.mediaConnections.delete(peerId);
+      this.emit('audio-ended', { peerId });
+    });
+    
+    call.on('error', (err) => {
+      console.error('Call error:', err);
+    });
+    
+    this.mediaConnections.set(peerId, call);
+  }
+  
+  /**
+   * Stop audio broadcast (release microphone)
+   */
+  stopAudioBroadcast() {
+    if (this.localAudioStream) {
+      this.localAudioStream.getTracks().forEach(track => track.stop());
+      this.localAudioStream = null;
+    }
+    
+    // Close all media connections
+    for (const call of this.mediaConnections.values()) {
+      call.close();
+    }
+    this.mediaConnections.clear();
+    
+    this.emit('audio-stopped', { deviceId: this.deviceId });
+  }
+  
+  /**
+   * Notify peers that walkie-talkie is active (push-to-talk started)
+   */
+  broadcastWalkieStatus(isActive) {
+    this.broadcast({
+      type: 'walkie-status',
+      data: {
+        isActive,
+        sourceDevice: this.deviceId,
+        timestamp: Date.now()
+      }
     });
   }
   
