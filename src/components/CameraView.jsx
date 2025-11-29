@@ -3,7 +3,7 @@ import * as tf from '@tensorflow/tfjs';
 import * as cocoSsd from '@tensorflow-models/coco-ssd';
 import { animate } from 'animejs';
 import FluidSimulation from '../utils/fluidSimulation';
-import { classifyDetections as classifyCocoDetections, getOverallThreatLevel, getTypeColor, TRACKABLE_TYPES } from '../utils/objectClassifier';
+import { classifyDetections as classifyCocoDetections, getOverallThreatLevel, getTypeColor, estimateHandPositions, TRACKABLE_TYPES } from '../utils/objectClassifier';
 import { yolov8Detector } from '../utils/yolov8Detector';
 import audioAlert from '../utils/audioAlert';
 import './CameraView.css';
@@ -265,13 +265,9 @@ function CameraView({ onDetections, onThreatLevel, isActive = true }) {
             
             // For person detections, also track estimated hand positions for movement tracking
             if (classification.type === 'person') {
-              // Estimate left and right hand positions (lower sides of bounding box)
-              const leftHandX = (boundingBox.x + boundingBox.width * 0.15) / canvas.width;
-              const rightHandX = (boundingBox.x + boundingBox.width * 0.85) / canvas.width;
-              const handsY = (boundingBox.y + boundingBox.height * 0.6) / canvas.height;
-              
-              fluidSimRef.current?.addTrailPoint(leftHandX, handsY, 'hand', `${objectId}_left_hand`);
-              fluidSimRef.current?.addTrailPoint(rightHandX, handsY, 'hand', `${objectId}_right_hand`);
+              const handPositions = estimateHandPositions(boundingBox, canvas.width, canvas.height);
+              fluidSimRef.current?.addTrailPoint(handPositions.leftHand.x, handPositions.leftHand.y, 'hand', `${objectId}_left_hand`);
+              fluidSimRef.current?.addTrailPoint(handPositions.rightHand.x, handPositions.rightHand.y, 'hand', `${objectId}_right_hand`);
             }
           }
         }

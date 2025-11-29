@@ -34,9 +34,37 @@ export const AERIAL_THREAT_TYPES = ['drone', 'quadcopter', 'fixed-wing', 'helico
 // All trackable types that should have Minovsky particle trails
 export const TRACKABLE_TYPES = ['drone', 'quadcopter', 'fixed-wing', 'helicopter', 'person', 'hand', 'vehicle'];
 
+// Hand position estimation constants (proportional positions within person bounding box)
+// Left hand is estimated at 15% from left edge, right hand at 85% from left edge
+// Hands are estimated at 60% down from top of bounding box (roughly arm level)
+const HAND_POSITION_LEFT_X = 0.15;
+const HAND_POSITION_RIGHT_X = 0.85;
+const HAND_POSITION_Y = 0.6;
+
 // Simulated drone detection keywords for demo purposes
 // In production, you'd use a custom-trained model
 const DEMO_KEYWORDS = ['drone', 'quadcopter', 'helicopter', 'aircraft', 'uav', 'suas'];
+
+/**
+ * Estimate hand positions within a person's bounding box
+ * Returns normalized coordinates for left and right hand positions
+ * @param {Object} boundingBox - Bounding box with x, y, width, height
+ * @param {number} canvasWidth - Canvas width for normalization
+ * @param {number} canvasHeight - Canvas height for normalization
+ * @returns {Object} Object with leftHand and rightHand positions {x, y}
+ */
+export function estimateHandPositions(boundingBox, canvasWidth, canvasHeight) {
+  return {
+    leftHand: {
+      x: (boundingBox.x + boundingBox.width * HAND_POSITION_LEFT_X) / canvasWidth,
+      y: (boundingBox.y + boundingBox.height * HAND_POSITION_Y) / canvasHeight
+    },
+    rightHand: {
+      x: (boundingBox.x + boundingBox.width * HAND_POSITION_RIGHT_X) / canvasWidth,
+      y: (boundingBox.y + boundingBox.height * HAND_POSITION_Y) / canvasHeight
+    }
+  };
+}
 
 /**
  * Check if a detection is an aerial threat
@@ -174,6 +202,7 @@ export default {
   getTypeColor,
   isAerialThreat,
   formatConfidence,
+  estimateHandPositions,
   THREAT_MAPPINGS,
   AERIAL_THREAT_TYPES,
   TRACKABLE_TYPES,

@@ -4,6 +4,12 @@
  * Features: Pink/magenta ionized particles, interference patterns, energy dispersal
  */
 
+// Motion detection threshold - minimum velocity magnitude to trigger trailing effect
+const MOTION_DETECTION_THRESHOLD = 0.001;
+
+// Time in milliseconds before a tracked object is removed from tracking (not seen)
+const TRACKED_OBJECT_TIMEOUT_MS = 2000;
+
 class FluidSimulation {
   constructor(canvas) {
     this.canvas = canvas;
@@ -252,7 +258,7 @@ class FluidSimulation {
     // Create trailing particles behind the object (in the opposite direction of motion)
     // This creates the "after image" effect showing trajectory
     const speed = Math.sqrt(velocityX * velocityX + velocityY * velocityY);
-    const hasMotion = speed > 0.001; // Threshold for detecting motion
+    const hasMotion = speed > MOTION_DETECTION_THRESHOLD;
     
     // Add core Minovsky particle (bright center) at current position
     this.trails.push({
@@ -360,9 +366,9 @@ class FluidSimulation {
       this.trails = this.trails.slice(-this.maxTrails);
     }
     
-    // Clean up old tracked objects (not seen for > 2 seconds)
+    // Clean up old tracked objects that haven't been seen recently
     for (const [id, data] of this.trackedObjects.entries()) {
-      if (now - data.lastSeen > 2000) {
+      if (now - data.lastSeen > TRACKED_OBJECT_TIMEOUT_MS) {
         this.trackedObjects.delete(id);
       }
     }
