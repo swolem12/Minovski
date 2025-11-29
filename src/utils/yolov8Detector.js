@@ -53,8 +53,8 @@ class YOLOv8Detector {
     try {
       console.log('Loading YOLOv8 model from:', modelPath);
       
-      // Configure ONNX Runtime Web
-      ort.env.wasm.wasmPaths = 'https://cdn.jsdelivr.net/npm/onnxruntime-web@1.17.0/dist/';
+      // Configure ONNX Runtime Web - use local WASM files bundled with onnxruntime-web
+      // The package includes WASM files that Vite will serve from node_modules
       
       // Try WebGL backend first for better performance, fallback to WASM
       const options = {
@@ -156,20 +156,22 @@ class YOLOv8Detector {
     // Preprocess
     const { tensor, scale, padX, padY, srcWidth, srcHeight } = this.preprocessImage(source);
 
-    // Run inference
-    const feeds = { [this.session.inputNames[0]]: tensor };
-    const results = await this.session.run(feeds);
-    
-    // Get output tensor
-    const output = results[this.session.outputNames[0]];
-    
-    // Process detections
-    const detections = this.postprocess(output, scale, padX, padY, srcWidth, srcHeight);
+    try {
+      // Run inference
+      const feeds = { [this.session.inputNames[0]]: tensor };
+      const results = await this.session.run(feeds);
+      
+      // Get output tensor
+      const output = results[this.session.outputNames[0]];
+      
+      // Process detections
+      const detections = this.postprocess(output, scale, padX, padY, srcWidth, srcHeight);
 
-    // Clean up tensor
-    tensor.dispose();
-
-    return detections;
+      return detections;
+    } finally {
+      // Clean up tensor - always dispose even if error occurs
+      tensor.dispose();
+    }
   }
 
   /**
@@ -211,11 +213,16 @@ class YOLOv8Detector {
       const x2 = (x + w / 2 - padX) / scale;
       const y2 = (y + h / 2 - padY) / scale;
 
-      // Clip to image bounds
-      const boxX = Math.max(0, Math.min(x1, srcWidth));
-      const boxY = Math.max(0, Math.min(y1, srcHeight));
-      const boxW = Math.max(0, Math.min(x2, srcWidth)) - boxX;
-      const boxH = Math.max(0, Math.min(y2, srcHeight)) - boxY;
+      // Properly clamp coordinates to image bounds
+      const clampedX1 = Math.max(0, Math.min(x1, srcWidth));
+      const clampedY1 = Math.max(0, Math.min(y1, srcHeight));
+      const clampedX2 = Math.max(0, Math.min(x2, srcWidth));
+      const clampedY2 = Math.max(0, Math.min(y2, srcHeight));
+      
+      const boxX = clampedX1;
+      const boxY = clampedY1;
+      const boxW = clampedX2 - clampedX1;
+      const boxH = clampedY2 - clampedY1;
 
       if (boxW <= 0 || boxH <= 0) continue;
 
@@ -280,6 +287,8 @@ class YOLOv8Detector {
 
   /**
    * Classify detections with threat levels
+   * Note: This method is similar to objectClassifier.js but handles YOLOv8's
+   * different output format (bbox array vs COCO-SSD's bbox property)
    */
   classifyDetections(detections) {
     return detections.map(det => {
