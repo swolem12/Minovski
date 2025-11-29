@@ -3,9 +3,13 @@ import * as tf from '@tensorflow/tfjs';
 import * as cocoSsd from '@tensorflow-models/coco-ssd';
 import { animate } from 'animejs';
 import FluidSimulation from '../utils/fluidSimulation';
-import { classifyDetections, getOverallThreatLevel, getTypeColor } from '../utils/objectClassifier';
+import { classifyDetections as classifyCocoDetections, getOverallThreatLevel, getTypeColor } from '../utils/objectClassifier';
+import { yolov8Detector } from '../utils/yolov8Detector';
 import audioAlert from '../utils/audioAlert';
 import './CameraView.css';
+
+// Model type: 'yolov8' or 'coco-ssd'
+const PREFERRED_MODEL = 'yolov8';
 
 function CameraView({ onDetections, onThreatLevel, isActive = true }) {
   const videoRef = useRef(null);
@@ -13,7 +17,9 @@ function CameraView({ onDetections, onThreatLevel, isActive = true }) {
   const fluidCanvasRef = useRef(null);
   const containerRef = useRef(null);
   const [model, setModel] = useState(null);
+  const [modelType, setModelType] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [loadingStatus, setLoadingStatus] = useState('Initializing...');
   const [error, setError] = useState(null);
   const [cameraActive, setCameraActive] = useState(false);
   const [permissionStatus, setPermissionStatus] = useState('prompt'); // 'prompt', 'granted', 'denied'
@@ -21,11 +27,35 @@ function CameraView({ onDetections, onThreatLevel, isActive = true }) {
   const animationRef = useRef(null);
   const lastDetectionsRef = useRef([]);
   
-  // Initialize TensorFlow.js and load model
+  // Initialize detection model (YOLOv8 preferred, COCO-SSD fallback)
   useEffect(() => {
     async function loadModel() {
       try {
         setIsLoading(true);
+        
+        if (PREFERRED_MODEL === 'yolov8') {
+          // Try loading YOLOv8 via ONNX Runtime Web
+          try {
+            setLoadingStatus('Loading YOLOv8 model via ONNX Runtime...');
+            
+            // For demo, we'll use a public YOLOv8n model
+            // In production, host your own model in /public/models/
+            const modelUrl = import.meta.env.BASE_URL + 'models/yolov8n.onnx';
+            
+            await yolov8Detector.loadModel(modelUrl);
+            setModel(yolov8Detector);
+            setModelType('yolov8');
+            console.log('YOLOv8 model loaded via ONNX Runtime Web');
+            setIsLoading(false);
+            return;
+          } catch (yoloError) {
+            console.warn('YOLOv8 loading failed, falling back to COCO-SSD:', yoloError);
+            setLoadingStatus('YOLOv8 unavailable, loading COCO-SSD...');
+          }
+        }
+        
+        // Fallback to COCO-SSD
+        setLoadingStatus('Loading TensorFlow.js COCO-SSD model...');
         await tf.ready();
         console.log('TensorFlow.js ready, backend:', tf.getBackend());
         
@@ -34,6 +64,7 @@ function CameraView({ onDetections, onThreatLevel, isActive = true }) {
         });
         
         setModel(loadedModel);
+        setModelType('coco-ssd');
         console.log('COCO-SSD model loaded');
         setIsLoading(false);
       } catch (err) {
@@ -172,9 +203,18 @@ function CameraView({ onDetections, onThreatLevel, isActive = true }) {
       }
       
       try {
-        // Run detection
-        const predictions = await model.detect(video);
-        const classifiedDetections = classifyDetections(predictions);
+        // Run detection based on model type
+        let classifiedDetections;
+        
+        if (modelType === 'yolov8') {
+          // YOLOv8 via ONNX Runtime Web
+          const predictions = await model.detect(video);
+          classifiedDetections = model.classifyDetections(predictions);
+        } else {
+          // COCO-SSD via TensorFlow.js
+          const predictions = await model.detect(video);
+          classifiedDetections = classifyCocoDetections(predictions);
+        }
         
         // Clear canvas
         ctx.clearRect(0, 0, canvas.width, canvas.height);
@@ -258,7 +298,7 @@ function CameraView({ onDetections, onThreatLevel, isActive = true }) {
         cancelAnimationFrame(animationRef.current);
       }
     };
-  }, [model, cameraActive, isActive, onDetections, onThreatLevel]);
+  }, [model, modelType, cameraActive, isActive, onDetections, onThreatLevel]);
   
   // Cleanup on unmount
   useEffect(() => {
@@ -275,7 +315,7 @@ function CameraView({ onDetections, onThreatLevel, isActive = true }) {
       {isLoading && !cameraActive && (
         <div className="loading-overlay">
           <div className="loader"></div>
-          <p>Loading AI Detection Model...</p>
+          <p>{loadingStatus}</p>
         </div>
       )}
       
@@ -335,6 +375,9 @@ function CameraView({ onDetections, onThreatLevel, isActive = true }) {
           <div className="tracking-status">
             <span className="tracking-indicator"></span>
             <span>Tracking Active</span>
+            <span className={`model-badge ${modelType}`}>
+              {modelType === 'yolov8' ? 'YOLOv8 ONNX' : 'COCO-SSD'}
+            </span>
           </div>
           <button 
             className="btn-stop-camera"

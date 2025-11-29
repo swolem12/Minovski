@@ -2,11 +2,12 @@
 
 **Optical Vision Drone Detection System with Minovsky Particle Tracking**
 
-A React-based web application that uses your device's camera and TensorFlow.js to detect and track drones, quadcopters, fixed-wing sUAS, and other aerial vehicles in real-time. Features Gundam-inspired Minovsky particle trail effects and multi-device sensor network capabilities.
+A React-based web application that uses your device's camera to detect and track drones, quadcopters, fixed-wing sUAS, and other aerial vehicles in real-time. Features **YOLOv8 via ONNX Runtime Web** for detection, Gundam-inspired Minovsky particle trail effects, and multi-device sensor network capabilities.
 
 ## 🚀 Features
 
-- **Real-time Object Detection**: Uses TensorFlow.js with COCO-SSD model for detecting aerial threats
+- **YOLOv8 Object Detection**: Uses ONNX Runtime Web to run YOLOv8 models directly in the browser
+- **Fallback Support**: Automatic fallback to TensorFlow.js COCO-SSD if YOLOv8 model unavailable
 - **Minovsky Particle Trails**: WebGL-powered particle effects inspired by Mobile Suit Gundam
 - **Audio/Haptic Alerts**: Buzzer notifications and device vibration for threat detection
 - **Multi-Device Network**: Connect multiple devices via WebRTC to create a distributed sensor network
@@ -15,17 +16,17 @@ A React-based web application that uses your device's camera and TensorFlow.js t
 
 ## 🎯 Detected Object Types
 
-- Drones / Quadcopters
-- Fixed-wing aircraft
+- Drones / Quadcopters (via bird/kite proxy detection)
+- Fixed-wing aircraft (airplane class)
 - Helicopters
-- Ground vehicles
+- Ground vehicles (cars, trucks, buses)
 - Personnel
 
 ## 📱 Usage
 
 1. Open the app on your mobile device
 2. Grant camera permissions when prompted
-3. Click "Start Camera" to begin detection
+3. Click "Start Tracking" to begin detection
 4. Point your camera at the sky to detect aerial objects
 5. The app will automatically alert you when threats are detected
 
@@ -40,12 +41,29 @@ A React-based web application that uses your device's camera and TensorFlow.js t
 
 - **React 19** - UI Framework
 - **Vite** - Build tool
-- **TensorFlow.js** - Machine learning in the browser
-- **COCO-SSD** - Object detection model
+- **ONNX Runtime Web** - YOLOv8 inference in browser
+- **TensorFlow.js + COCO-SSD** - Fallback detection model
 - **WebGL** - Minovsky particle effects
-- **Anime.js** - UI animations
+- **Anime.js v4** - UI animations
 - **PeerJS** - WebRTC for multi-device communication
 - **Web Audio API** - Alert sounds
+
+## 🔧 YOLOv8 Model Setup
+
+To use YOLOv8 detection, you need to provide an ONNX model:
+
+```bash
+# Install ultralytics
+pip install ultralytics
+
+# Export YOLOv8n to ONNX
+python -c "from ultralytics import YOLO; YOLO('yolov8n.pt').export(format='onnx', imgsz=640, simplify=True)"
+
+# Copy to public/models/
+cp yolov8n.onnx public/models/
+```
+
+See `public/models/README.md` for more details.
 
 ## 🚀 Deployment
 
@@ -71,7 +89,7 @@ npm run preview
 
 ## 📋 Requirements
 
-- Modern web browser with WebGL support
+- Modern web browser with WebGL and WebAssembly support
 - Camera access (rear camera preferred)
 - HTTPS connection (required for camera access)
 
@@ -83,7 +101,7 @@ npm run preview
 
 ## ⚠️ Disclaimer
 
-This is a prototype/demonstration application. The detection model is based on COCO-SSD which was not specifically trained for drone detection. For production use, a custom-trained model would be recommended.
+This is a prototype/demonstration application. For optimal drone detection, train a custom YOLOv8 model on drone datasets.
 
 ## 📜 License
 

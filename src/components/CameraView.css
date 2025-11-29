@@ -78,6 +78,26 @@
   }
 }
 
+.model-badge {
+  padding: 3px 8px;
+  border-radius: 4px;
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  margin-left: 8px;
+}
+
+.model-badge.yolov8 {
+  background: linear-gradient(135deg, #8b5cf6, #6366f1);
+  color: white;
+}
+
+.model-badge.coco-ssd {
+  background: linear-gradient(135deg, #f97316, #ea580c);
+  color: white;
+}
+
 .btn-stop-camera {
   display: flex;
   align-items: center;
