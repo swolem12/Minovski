@@ -8,7 +8,13 @@ import { v4 as uuidv4 } from 'uuid';
 
 // Connection timeout in milliseconds - increased to allow for NAT traversal via TURN servers
 // TURN relay connections across different networks can take longer to establish
-const CONNECTION_TIMEOUT_MS = 30000;
+const CONNECTION_TIMEOUT_MS = 45000;
+
+// Maximum number of connection retry attempts
+const MAX_RETRY_ATTEMPTS = 3;
+
+// Base delay for exponential backoff (ms)
+const RETRY_BASE_DELAY_MS = 2000;
 
 class PeerNetwork {
   constructor() {
@@ -21,6 +27,10 @@ class PeerNetwork {
     // Audio/media call support
     this.mediaConnections = new Map();
     this.localAudioStream = null;
+    // Video streaming support
+    this.videoConnections = new Map();
+    this.localVideoStream = null;
+    this.isStreamingVideo = false;
   }
   
   /**
@@ -36,6 +46,72 @@ class PeerNetwork {
   }
   
   /**
+   * Get ICE servers configuration with multiple TURN providers for redundancy
+   */
+  getIceServers() {
+    return [
+      // === STUN Servers (for discovering public IP) ===
+      { urls: 'stun:stun.l.google.com:19302' },
+      { urls: 'stun:stun1.l.google.com:19302' },
+      { urls: 'stun:stun2.l.google.com:19302' },
+      { urls: 'stun:stun3.l.google.com:19302' },
+      { urls: 'stun:stun4.l.google.com:19302' },
+      // OpenRelay STUN
+      { urls: 'stun:openrelay.metered.ca:80' },
+      // Additional STUN for redundancy
+      { urls: 'stun:stun.stunprotocol.org:3478' },
+      
+      // === TURN Servers (for NAT traversal across different networks) ===
+      // Free public TURN servers from OpenRelay (metered.ca)
+      // These are intentionally public credentials provided for open-source projects
+      // TURN credentials must be client-accessible for WebRTC - the service has rate limiting
+      
+      // OpenRelay TURN - UDP on port 80 (commonly allowed through firewalls)
+      {
+        urls: 'turn:openrelay.metered.ca:80',
+        username: 'openrelayproject',
+        credential: 'openrelayproject'
+      },
+      // OpenRelay TURN - UDP on port 443
+      {
+        urls: 'turn:openrelay.metered.ca:443',
+        username: 'openrelayproject',
+        credential: 'openrelayproject'
+      },
+      // OpenRelay TURN - TCP on port 443 (for restrictive firewalls that block UDP)
+      {
+        urls: 'turn:openrelay.metered.ca:443?transport=tcp',
+        username: 'openrelayproject',
+        credential: 'openrelayproject'
+      },
+      // OpenRelay TURNS (TLS) for most restrictive networks - appears as normal HTTPS traffic
+      {
+        urls: 'turns:openrelay.metered.ca:443',
+        username: 'openrelayproject',
+        credential: 'openrelayproject'
+      },
+      
+      // Additional backup TURN servers for redundancy
+      // Relay server on standard ports for broader compatibility
+      {
+        urls: 'turn:relay.metered.ca:80',
+        username: 'openrelayproject',
+        credential: 'openrelayproject'
+      },
+      {
+        urls: 'turn:relay.metered.ca:443',
+        username: 'openrelayproject',
+        credential: 'openrelayproject'
+      },
+      {
+        urls: 'turn:relay.metered.ca:443?transport=tcp',
+        username: 'openrelayproject',
+        credential: 'openrelayproject'
+      }
+    ];
+  }
+  
+  /**
    * Initialize peer connection
    */
   async init() {
@@ -44,45 +120,11 @@ class PeerNetwork {
         this.peer = new Peer(this.deviceId, {
           debug: 1,
           config: {
-            iceServers: [
-              // STUN servers for discovering public IP
-              { urls: 'stun:stun.l.google.com:19302' },
-              { urls: 'stun:stun1.l.google.com:19302' },
-              { urls: 'stun:stun2.l.google.com:19302' },
-              { urls: 'stun:stun3.l.google.com:19302' },
-              { urls: 'stun:stun4.l.google.com:19302' },
-              // OpenRelay STUN servers
-              { urls: 'stun:openrelay.metered.ca:80' },
-              // Free public TURN servers from OpenRelay for NAT traversal across different networks
-              // These are intentionally public credentials provided by OpenRelay (metered.ca) for open-source projects
-              // TURN credentials must be client-accessible for WebRTC - the service has rate limiting
-              // UDP transport on port 80 (commonly allowed through firewalls)
-              {
-                urls: 'turn:openrelay.metered.ca:80',
-                username: 'openrelayproject',
-                credential: 'openrelayproject'
-              },
-              // UDP transport on port 443
-              {
-                urls: 'turn:openrelay.metered.ca:443',
-                username: 'openrelayproject',
-                credential: 'openrelayproject'
-              },
-              // TCP transport on port 443 (for restrictive firewalls that block UDP)
-              {
-                urls: 'turn:openrelay.metered.ca:443?transport=tcp',
-                username: 'openrelayproject',
-                credential: 'openrelayproject'
-              },
-              // TURNS (TLS) for most restrictive networks - appears as normal HTTPS traffic
-              {
-                urls: 'turns:openrelay.metered.ca:443',
-                username: 'openrelayproject',
-                credential: 'openrelayproject'
-              }
-            ],
+            iceServers: this.getIceServers(),
             // Pre-gather ICE candidates for faster connection establishment
-            iceCandidatePoolSize: 10
+            iceCandidatePoolSize: 10,
+            // Enable aggressive ICE for better connectivity
+            iceTransportPolicy: 'all'
           }
         });
         
@@ -137,10 +179,11 @@ class PeerNetwork {
   }
   
   /**
-   * Join an existing room
+   * Join an existing room with automatic retry on failure
    * @param {string} hostId - Host's device ID
+   * @param {number} attempt - Current attempt number (used internally for retries)
    */
-  async joinRoom(hostId) {
+  async joinRoom(hostId, attempt = 1) {
     return new Promise((resolve, reject) => {
       // Check if peer is initialized
       if (!this.peer || this.peer.destroyed) {
@@ -153,6 +196,14 @@ class PeerNetwork {
         reject(new Error('Peer is disconnected. Please refresh and try again.'));
         return;
       }
+      
+      // Emit connection progress event
+      this.emit('connection-progress', { 
+        status: 'connecting', 
+        attempt, 
+        maxAttempts: MAX_RETRY_ATTEMPTS,
+        message: attempt > 1 ? `Retrying connection (attempt ${attempt}/${MAX_RETRY_ATTEMPTS})...` : 'Establishing connection...'
+      });
       
       const conn = this.peer.connect(hostId, {
         reliable: true,
@@ -168,11 +219,34 @@ class PeerNetwork {
       // Set a timeout for connection attempt
       // Note: Cross-network connections via TURN may take longer to establish
       const connectionTimeout = setTimeout(() => {
-        reject(new Error('Connection timeout. The host may be offline, or firewall/network restrictions are preventing the connection. Both devices need internet access for cross-network connections.'));
+        // If we haven't exhausted retries, try again
+        if (attempt < MAX_RETRY_ATTEMPTS) {
+          this.emit('connection-progress', { 
+            status: 'retrying', 
+            attempt: attempt + 1, 
+            maxAttempts: MAX_RETRY_ATTEMPTS,
+            message: `Connection timed out. Retrying (attempt ${attempt + 1}/${MAX_RETRY_ATTEMPTS})...`
+          });
+          
+          // Exponential backoff: 2s, 4s, 8s...
+          const delay = RETRY_BASE_DELAY_MS * Math.pow(2, attempt - 1);
+          setTimeout(() => {
+            this.joinRoom(hostId, attempt + 1).then(resolve).catch(reject);
+          }, delay);
+        } else {
+          // All retries exhausted
+          const errorMessage = this.getDetailedConnectionError();
+          reject(new Error(errorMessage));
+        }
       }, CONNECTION_TIMEOUT_MS);
       
       conn.on('open', () => {
         clearTimeout(connectionTimeout);
+        this.emit('connection-progress', { 
+          status: 'connected', 
+          attempt,
+          message: 'Successfully connected!'
+        });
         this.handleConnection(conn);
         this.roomId = hostId;
         resolve(conn);
@@ -185,6 +259,26 @@ class PeerNetwork {
     });
   }
   
+  /**
+   * Generate a detailed error message with troubleshooting tips
+   */
+  getDetailedConnectionError() {
+    return `Connection failed after ${MAX_RETRY_ATTEMPTS} attempts.
+
+Troubleshooting tips:
+• Verify the Device ID is correct (copy-paste recommended)
+• Ensure the host device is still online and has the app open
+• Check that both devices have internet access
+• If on different networks (e.g., home WiFi vs mobile data), the connection requires TURN relay servers
+• Try disabling VPN if connected through one
+• Some corporate/school networks may block peer-to-peer connections
+
+If problems persist, try:
+1. Both devices refresh the page
+2. Host creates a new network
+3. Connect while both on the same WiFi (for testing)`;
+  }
+
   /**
    * Handle incoming connection
    */
@@ -266,6 +360,10 @@ class PeerNetwork {
       case 'walkie-status':
         // Walkie-talkie push-to-talk status
         this.emit('walkie-status', { peerId, isActive: data.isActive, timestamp: data.timestamp });
+        break;
+      case 'video-request':
+        // Another peer is requesting our video stream
+        this.emit('video-request', { peerId, requesterId: data.requesterId, timestamp: data.timestamp });
         break;
       default:
         this.emit('message', { peerId, type, data });
@@ -350,34 +448,63 @@ class PeerNetwork {
    */
   handleIncomingCall(call) {
     const peerId = call.peer;
-    console.log('Incoming call from:', peerId);
+    const callMetadata = call.metadata || {};
+    const isVideoCall = callMetadata.type === 'video';
     
-    // Answer the call - if we have a local stream, share it; otherwise answer without stream
-    // PeerJS handles the case where answer() is called without a stream
-    if (this.localAudioStream) {
-      call.answer(this.localAudioStream);
+    console.log(`Incoming ${isVideoCall ? 'video' : 'audio'} call from:`, peerId);
+    
+    if (isVideoCall) {
+      // This is a video call - answer with our local video stream if we're streaming
+      if (this.localVideoStream) {
+        call.answer(this.localVideoStream);
+      } else {
+        // Answer without stream - we'll get their stream anyway
+        call.answer();
+      }
+      
+      call.on('stream', (remoteStream) => {
+        console.log('Received remote video stream from:', peerId);
+        this.emit('remote-video', { peerId, stream: remoteStream });
+      });
+      
+      call.on('close', () => {
+        console.log('Video call closed with:', peerId);
+        this.videoConnections.delete(peerId);
+        this.emit('video-ended', { peerId });
+      });
+      
+      call.on('error', (err) => {
+        console.error('Video call error with', peerId, err);
+        this.emit('video-error', { peerId, error: err });
+      });
+      
+      this.videoConnections.set(peerId, call);
     } else {
-      // Answer without stream - we'll add our stream later when user starts talking
-      call.answer();
+      // This is an audio call
+      if (this.localAudioStream) {
+        call.answer(this.localAudioStream);
+      } else {
+        call.answer();
+      }
+      
+      call.on('stream', (remoteStream) => {
+        console.log('Received remote audio stream from:', peerId);
+        this.emit('remote-audio', { peerId, stream: remoteStream });
+      });
+      
+      call.on('close', () => {
+        console.log('Audio call closed with:', peerId);
+        this.mediaConnections.delete(peerId);
+        this.emit('audio-ended', { peerId });
+      });
+      
+      call.on('error', (err) => {
+        console.error('Audio call error with', peerId, err);
+        this.emit('audio-error', { peerId, error: err });
+      });
+      
+      this.mediaConnections.set(peerId, call);
     }
-    
-    call.on('stream', (remoteStream) => {
-      console.log('Received remote audio stream from:', peerId);
-      this.emit('remote-audio', { peerId, stream: remoteStream });
-    });
-    
-    call.on('close', () => {
-      console.log('Call closed with:', peerId);
-      this.mediaConnections.delete(peerId);
-      this.emit('audio-ended', { peerId });
-    });
-    
-    call.on('error', (err) => {
-      console.error('Call error with', peerId, err);
-      this.emit('audio-error', { peerId, error: err });
-    });
-    
-    this.mediaConnections.set(peerId, call);
   }
   
   /**
@@ -456,6 +583,131 @@ class PeerNetwork {
   }
   
   /**
+   * Start video streaming (share camera with peers)
+   * @param {MediaStream} existingStream - Optional existing video stream to use
+   * @returns {Promise<MediaStream>} The local video stream
+   */
+  async startVideoStream(existingStream = null) {
+    try {
+      if (existingStream) {
+        this.localVideoStream = existingStream;
+      } else {
+        // Get video stream from camera
+        this.localVideoStream = await navigator.mediaDevices.getUserMedia({
+          video: {
+            facingMode: 'environment',
+            width: { ideal: 1280 },
+            height: { ideal: 720 }
+          },
+          audio: false
+        });
+      }
+      
+      this.isStreamingVideo = true;
+      
+      // Call all connected peers with the video stream
+      for (const peerId of this.connections.keys()) {
+        this.callPeerWithVideo(peerId);
+      }
+      
+      this.emit('video-started', { deviceId: this.deviceId });
+      return this.localVideoStream;
+    } catch (err) {
+      console.error('Failed to get video stream:', err);
+      // Provide specific error messages for common cases
+      let errorMessage = 'Failed to access camera';
+      if (err.name === 'NotAllowedError' || err.name === 'PermissionDeniedError') {
+        errorMessage = 'Camera permission denied. Please allow camera access.';
+      } else if (err.name === 'NotFoundError' || err.name === 'DevicesNotFoundError') {
+        errorMessage = 'No camera found on this device.';
+      } else if (err.name === 'NotReadableError' || err.name === 'TrackStartError') {
+        errorMessage = 'Camera is in use by another application.';
+      } else if (err.name === 'OverconstrainedError') {
+        errorMessage = 'Camera does not support the requested settings.';
+      }
+      this.emit('video-error', { error: err, message: errorMessage });
+      throw new Error(errorMessage);
+    }
+  }
+  
+  /**
+   * Call a specific peer with video
+   */
+  callPeerWithVideo(peerId) {
+    if (!this.peer || !this.localVideoStream) return;
+    
+    // Use metadata to indicate this is a video call
+    const call = this.peer.call(peerId, this.localVideoStream, {
+      metadata: { type: 'video' }
+    });
+    if (!call) return;
+    
+    call.on('stream', (remoteStream) => {
+      this.emit('remote-video', { peerId, stream: remoteStream });
+    });
+    
+    call.on('close', () => {
+      this.videoConnections.delete(peerId);
+      this.emit('video-ended', { peerId });
+    });
+    
+    call.on('error', (err) => {
+      console.error('Video call error:', err);
+      this.emit('video-error', { peerId, error: err });
+    });
+    
+    this.videoConnections.set(peerId, call);
+  }
+  
+  /**
+   * Request video from a specific peer (used when host wants to view a device's camera)
+   * @param {string} peerId - The peer to request video from
+   */
+  requestVideoFromPeer(peerId) {
+    // Send a request to the peer to start streaming their video
+    const conn = this.connections.get(peerId);
+    if (conn && conn.open) {
+      conn.send({
+        type: 'video-request',
+        data: {
+          requesterId: this.deviceId,
+          timestamp: Date.now()
+        }
+      });
+      this.emit('video-requested', { peerId });
+    }
+  }
+  
+  /**
+   * Stop video streaming (release camera for video calls)
+   */
+  stopVideoStream() {
+    if (this.localVideoStream) {
+      const tracks = this.localVideoStream.getTracks();
+      if (tracks && tracks.length > 0) {
+        tracks.forEach(track => {
+          if (track && typeof track.stop === 'function') {
+            track.stop();
+          }
+        });
+      }
+      this.localVideoStream = null;
+    }
+    
+    this.isStreamingVideo = false;
+    
+    // Close all video connections
+    for (const call of this.videoConnections.values()) {
+      if (call && typeof call.close === 'function') {
+        call.close();
+      }
+    }
+    this.videoConnections.clear();
+    
+    this.emit('video-stopped', { deviceId: this.deviceId });
+  }
+  
+  /**
    * Notify peers that walkie-talkie is active (push-to-talk started)
    */
   broadcastWalkieStatus(isActive) {
@@ -526,6 +778,12 @@ class PeerNetwork {
    * Disconnect and cleanup
    */
   disconnect() {
+    // Stop video streaming
+    this.stopVideoStream();
+    
+    // Stop audio streaming
+    this.stopAudioBroadcast();
+    
     for (const conn of this.connections.values()) {
       conn.close();
     }

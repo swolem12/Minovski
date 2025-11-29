@@ -16,6 +16,7 @@ function NetworkPanel({ onRemoteDetection, onViewSwitch, onGridViewToggle }) {
   const [isGridView, setIsGridView] = useState(false);
   const [joinError, setJoinError] = useState('');
   const [isJoining, setIsJoining] = useState(false);
+  const [connectionProgress, setConnectionProgress] = useState(null);
   const panelRef = useRef(null);
   const alertsRef = useRef(null);
   
@@ -77,12 +78,22 @@ function NetworkPanel({ onRemoteDetection, onViewSwitch, onGridViewToggle }) {
       onViewSwitch?.({ targetDevice, fromHost: peerId });
     });
     
+    // Listen for connection progress events (for retry feedback)
+    const unsubConnectionProgress = peerNetwork.on('connection-progress', (progress) => {
+      setConnectionProgress(progress);
+      if (progress.status === 'connected') {
+        // Clear progress message after successful connection
+        setTimeout(() => setConnectionProgress(null), 2000);
+      }
+    });
+    
     return () => {
       unsubConnected();
       unsubDisconnected();
       unsubRemoteDetection();
       unsubRemoteAlert();
       unsubViewSwitch();
+      unsubConnectionProgress();
       peerNetwork.disconnect();
     };
   }, [onRemoteDetection, onViewSwitch, animateNewPeer, animateAlert]);
@@ -110,6 +121,7 @@ function NetworkPanel({ onRemoteDetection, onViewSwitch, onGridViewToggle }) {
     
     setIsJoining(true);
     setJoinError('');
+    setConnectionProgress(null);
     
     try {
       await peerNetwork.joinRoom(joinRoomId.trim());
@@ -125,6 +137,7 @@ function NetworkPanel({ onRemoteDetection, onViewSwitch, onGridViewToggle }) {
       }
     } catch (err) {
       console.error('Failed to join room:', err);
+      setConnectionProgress(null);
       setJoinError(err.message || 'Failed to connect. Check the Device ID and try again.');
       if (panelRef.current) {
         animate(panelRef.current, {
@@ -266,6 +279,11 @@ function NetworkPanel({ onRemoteDetection, onViewSwitch, onGridViewToggle }) {
                     {isJoining ? 'Joining...' : 'Join'}
                   </button>
                 </div>
+                {connectionProgress && isJoining && (
+                  <p className={`connection-progress ${connectionProgress.status}`}>
+                    {connectionProgress.message}
+                  </p>
+                )}
                 {joinError && (
                   <p className="join-error">{joinError}</p>
                 )}
