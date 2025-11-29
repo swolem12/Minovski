@@ -3,6 +3,7 @@ import { animate, utils } from 'animejs';
 import CameraView from './CameraView';
 import ThreatDisplay from './ThreatDisplay';
 import NetworkPanel from './NetworkPanel';
+import FullScreenCamera from './FullScreenCamera';
 import peerNetwork from '../utils/peerNetwork';
 import audioAlert from '../utils/audioAlert';
 import { getOverallThreatLevel } from '../utils/objectClassifier';
@@ -13,6 +14,7 @@ function TrackingPage({ onBackToHome }) {
   const [threatLevel, setThreatLevel] = useState('none');
   const [remoteDetections, setRemoteDetections] = useState([]);
   const [isActive] = useState(true);
+  const [isFullScreen, setIsFullScreen] = useState(false);
   const containerRef = useRef(null);
   const headerRef = useRef(null);
   
@@ -112,6 +114,25 @@ function TrackingPage({ onBackToHome }) {
       onBackToHome();
     }
   };
+  
+  const openFullScreen = () => {
+    setIsFullScreen(true);
+  };
+  
+  const closeFullScreen = () => {
+    setIsFullScreen(false);
+  };
+  
+  // Render full screen camera if active
+  if (isFullScreen) {
+    return (
+      <FullScreenCamera 
+        onClose={closeFullScreen}
+        onDetections={handleDetections}
+        onThreatLevel={handleThreatLevel}
+      />
+    );
+  }
 
   return (
     <div className="tracking-page" ref={containerRef}>
@@ -136,6 +157,16 @@ function TrackingPage({ onBackToHome }) {
       
       <main className="tracking-main">
         <section className="camera-section">
+          <div className="camera-section-header">
+            <h2 className="camera-section-title">
+              <span className="camera-title-icon">◉</span>
+              OPTICAL FEED
+            </h2>
+            <button className="btn-fullscreen" onClick={openFullScreen}>
+              <span className="fullscreen-icon">⛶</span>
+              <span>FULL SCAN</span>
+            </button>
+          </div>
           <CameraView 
             onDetections={handleDetections}
             onThreatLevel={handleThreatLevel}

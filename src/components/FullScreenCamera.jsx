@@ -1,0 +1,486 @@
+import { useEffect, useRef, useState, useCallback } from 'react';
+import * as tf from '@tensorflow/tfjs';
+import * as cocoSsd from '@tensorflow-models/coco-ssd';
+import { animate } from 'animejs';
+import FluidSimulation from '../utils/fluidSimulation';
+import { classifyDetections as classifyCocoDetections, getOverallThreatLevel, getTypeColor, getThreatColor } from '../utils/objectClassifier';
+import { yolov8Detector } from '../utils/yolov8Detector';
+import audioAlert from '../utils/audioAlert';
+import './FullScreenCamera.css';
+
+const PREFERRED_MODEL = 'yolov8';
+
+function FullScreenCamera({ onClose, onDetections, onThreatLevel }) {
+  const videoRef = useRef(null);
+  const canvasRef = useRef(null);
+  const fluidCanvasRef = useRef(null);
+  const containerRef = useRef(null);
+  const [model, setModel] = useState(null);
+  const [modelType, setModelType] = useState(null);
+  const [isLoading, setIsLoading] = useState(true);
+  const [loadingStatus, setLoadingStatus] = useState('Initializing systems...');
+  const [error, setError] = useState(null);
+  const [cameraActive, setCameraActive] = useState(false);
+  const [threatLevel, setThreatLevel] = useState('none');
+  const [detections, setDetections] = useState([]);
+  const fluidSimRef = useRef(null);
+  const animationRef = useRef(null);
+  
+  // Initialize detection model
+  useEffect(() => {
+    async function loadModel() {
+      try {
+        setIsLoading(true);
+        
+        if (PREFERRED_MODEL === 'yolov8') {
+          try {
+            setLoadingStatus('Loading YOLOv8 neural network...');
+            const modelUrl = import.meta.env.BASE_URL + 'models/yolov8n.onnx';
+            await yolov8Detector.loadModel(modelUrl);
+            setModel(yolov8Detector);
+            setModelType('yolov8');
+            console.log('YOLOv8 model loaded via ONNX Runtime Web');
+            setIsLoading(false);
+            return;
+          } catch (yoloError) {
+            console.warn('YOLOv8 loading failed, falling back to COCO-SSD:', yoloError);
+            setLoadingStatus('Switching to COCO-SSD model...');
+          }
+        }
+        
+        setLoadingStatus('Initializing TensorFlow.js...');
+        await tf.ready();
+        
+        const loadedModel = await cocoSsd.load({
+          base: 'lite_mobilenet_v2'
+        });
+        
+        setModel(loadedModel);
+        setModelType('coco-ssd');
+        setIsLoading(false);
+      } catch (err) {
+        console.error('Error loading model:', err);
+        setError('Failed to load detection model');
+        setIsLoading(false);
+      }
+    }
+    
+    loadModel();
+  }, []);
+  
+  // Initialize fluid simulation
+  useEffect(() => {
+    if (fluidCanvasRef.current) {
+      fluidSimRef.current = new FluidSimulation(fluidCanvasRef.current);
+    }
+    
+    return () => {
+      if (fluidSimRef.current) {
+        fluidSimRef.current.dispose();
+      }
+    };
+  }, []);
+  
+  // Request camera and start tracking immediately
+  const startCamera = useCallback(async () => {
+    audioAlert.init();
+    
+    try {
+      setError(null);
+      
+      const constraints = {
+        video: {
+          facingMode: 'environment',
+          width: { ideal: 1920 },
+          height: { ideal: 1080 }
+        },
+        audio: false
+      };
+      
+      const stream = await navigator.mediaDevices.getUserMedia(constraints);
+      
+      if (videoRef.current) {
+        videoRef.current.srcObject = stream;
+        await videoRef.current.play();
+        setCameraActive(true);
+        
+        if (containerRef.current) {
+          animate(containerRef.current, {
+            opacity: [0, 1],
+            duration: 400,
+            ease: 'outQuad'
+          });
+        }
+      }
+    } catch (err) {
+      console.error('Camera error:', err);
+      if (err.name === 'NotAllowedError') {
+        setError('Camera access denied. Please enable camera permissions.');
+      } else if (err.name === 'NotFoundError') {
+        setError('No camera found on this device.');
+      } else {
+        setError('Unable to access camera.');
+      }
+    }
+  }, []);
+  
+  // Auto-start camera when model is loaded - use requestAnimationFrame to avoid synchronous setState
+  useEffect(() => {
+    if (!isLoading && model && !cameraActive && !error) {
+      // Defer the state update to avoid calling setState synchronously in effect
+      requestAnimationFrame(() => {
+        startCamera();
+      });
+    }
+  }, [isLoading, model, cameraActive, error, startCamera]);
+  
+  // Stop camera
+  const stopCamera = useCallback(() => {
+    if (videoRef.current && videoRef.current.srcObject) {
+      const tracks = videoRef.current.srcObject.getTracks();
+      tracks.forEach(track => track.stop());
+      videoRef.current.srcObject = null;
+      setCameraActive(false);
+    }
+    
+    if (animationRef.current) {
+      cancelAnimationFrame(animationRef.current);
+    }
+  }, []);
+  
+  // Detection loop
+  useEffect(() => {
+    if (!model || !cameraActive) return;
+    
+    const video = videoRef.current;
+    const canvas = canvasRef.current;
+    const ctx = canvas.getContext('2d');
+    
+    let lastAlertTime = 0;
+    const ALERT_COOLDOWN = 3000;
+    
+    async function detect() {
+      if (!video || video.paused || video.ended) {
+        animationRef.current = requestAnimationFrame(detect);
+        return;
+      }
+      
+      if (canvas.width !== video.videoWidth || canvas.height !== video.videoHeight) {
+        canvas.width = video.videoWidth;
+        canvas.height = video.videoHeight;
+        
+        if (fluidCanvasRef.current) {
+          fluidCanvasRef.current.width = video.videoWidth;
+          fluidCanvasRef.current.height = video.videoHeight;
+          fluidSimRef.current?.resize(video.videoWidth, video.videoHeight);
+        }
+      }
+      
+      try {
+        let classifiedDetections;
+        
+        if (modelType === 'yolov8') {
+          const predictions = await model.detect(video);
+          classifiedDetections = model.classifyDetections(predictions);
+        } else {
+          const predictions = await model.detect(video);
+          classifiedDetections = classifyCocoDetections(predictions);
+        }
+        
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        
+        for (const detection of classifiedDetections) {
+          const { boundingBox, classification, confidence } = detection;
+          const color = getTypeColor(classification.type);
+          
+          // Draw tactical-style bounding box
+          ctx.strokeStyle = color;
+          ctx.lineWidth = 2;
+          ctx.setLineDash([]);
+          
+          // Corner brackets style
+          const cornerSize = Math.min(boundingBox.width, boundingBox.height) * 0.15;
+          
+          // Top-left corner
+          ctx.beginPath();
+          ctx.moveTo(boundingBox.x, boundingBox.y + cornerSize);
+          ctx.lineTo(boundingBox.x, boundingBox.y);
+          ctx.lineTo(boundingBox.x + cornerSize, boundingBox.y);
+          ctx.stroke();
+          
+          // Top-right corner
+          ctx.beginPath();
+          ctx.moveTo(boundingBox.x + boundingBox.width - cornerSize, boundingBox.y);
+          ctx.lineTo(boundingBox.x + boundingBox.width, boundingBox.y);
+          ctx.lineTo(boundingBox.x + boundingBox.width, boundingBox.y + cornerSize);
+          ctx.stroke();
+          
+          // Bottom-left corner
+          ctx.beginPath();
+          ctx.moveTo(boundingBox.x, boundingBox.y + boundingBox.height - cornerSize);
+          ctx.lineTo(boundingBox.x, boundingBox.y + boundingBox.height);
+          ctx.lineTo(boundingBox.x + cornerSize, boundingBox.y + boundingBox.height);
+          ctx.stroke();
+          
+          // Bottom-right corner
+          ctx.beginPath();
+          ctx.moveTo(boundingBox.x + boundingBox.width - cornerSize, boundingBox.y + boundingBox.height);
+          ctx.lineTo(boundingBox.x + boundingBox.width, boundingBox.y + boundingBox.height);
+          ctx.lineTo(boundingBox.x + boundingBox.width, boundingBox.y + boundingBox.height - cornerSize);
+          ctx.stroke();
+          
+          // Draw label
+          const label = `${classification.label.toUpperCase()} ${Math.round(confidence * 100)}%`;
+          ctx.font = 'bold 12px Inter, sans-serif';
+          const textWidth = ctx.measureText(label).width;
+          
+          ctx.fillStyle = 'rgba(0, 0, 0, 0.7)';
+          ctx.fillRect(
+            boundingBox.x,
+            boundingBox.y - 22,
+            textWidth + 12,
+            20
+          );
+          
+          ctx.fillStyle = color;
+          ctx.fillText(
+            label,
+            boundingBox.x + 6,
+            boundingBox.y - 7
+          );
+          
+          if (['drone', 'quadcopter', 'fixed-wing', 'helicopter'].includes(classification.type)) {
+            const normalizedX = boundingBox.centerX / canvas.width;
+            const normalizedY = boundingBox.centerY / canvas.height;
+            fluidSimRef.current?.addTrailPoint(normalizedX, normalizedY, classification.type);
+          }
+        }
+        
+        fluidSimRef.current?.render();
+        
+        const currentThreatLevel = getOverallThreatLevel(classifiedDetections);
+        
+        if (currentThreatLevel !== 'none' && currentThreatLevel !== 'info') {
+          const now = Date.now();
+          if (now - lastAlertTime > ALERT_COOLDOWN) {
+            audioAlert.alert(currentThreatLevel);
+            lastAlertTime = now;
+          }
+        }
+        
+        setDetections(classifiedDetections);
+        setThreatLevel(currentThreatLevel);
+        onDetections?.(classifiedDetections);
+        onThreatLevel?.(currentThreatLevel);
+        
+      } catch (err) {
+        console.error('Detection error:', err);
+      }
+      
+      animationRef.current = requestAnimationFrame(detect);
+    }
+    
+    detect();
+    
+    return () => {
+      if (animationRef.current) {
+        cancelAnimationFrame(animationRef.current);
+      }
+    };
+  }, [model, modelType, cameraActive, onDetections, onThreatLevel]);
+  
+  // Cleanup on unmount
+  useEffect(() => {
+    return () => {
+      stopCamera();
+    };
+  }, [stopCamera]);
+  
+  const handleClose = () => {
+    stopCamera();
+    onClose();
+  };
+  
+  const getThreatLabel = (level) => {
+    const labels = {
+      none: 'ALL CLEAR',
+      info: 'MONITORING',
+      low: 'LOW THREAT',
+      medium: 'CAUTION',
+      high: 'HIGH THREAT',
+      critical: 'CRITICAL'
+    };
+    return labels[level] || 'UNKNOWN';
+  };
+  
+  const activeThreats = detections.filter(d => 
+    ['drone', 'quadcopter', 'fixed-wing', 'helicopter'].includes(d.classification?.type)
+  );
+
+  return (
+    <div className="fullscreen-camera" ref={containerRef}>
+      {/* Header */}
+      <header className="fs-header">
+        <div className="fs-header-left">
+          <div className="fs-logo">
+            <span className="fs-logo-icon">◆</span>
+            <span className="fs-logo-text">MINOVSKI</span>
+          </div>
+          <div className="fs-mode-badge">
+            <span className="fs-mode-dot"></span>
+            <span>FULL SCAN MODE</span>
+          </div>
+        </div>
+        
+        <div className="fs-header-center">
+          <div className={`fs-threat-indicator threat-${threatLevel}`}>
+            <span className="fs-threat-dot"></span>
+            <span className="fs-threat-text">{getThreatLabel(threatLevel)}</span>
+          </div>
+        </div>
+        
+        <div className="fs-header-right">
+          <div className="fs-stats">
+            <div className="fs-stat">
+              <span className="fs-stat-value">{detections.length}</span>
+              <span className="fs-stat-label">OBJECTS</span>
+            </div>
+            <div className="fs-stat">
+              <span className="fs-stat-value">{activeThreats.length}</span>
+              <span className="fs-stat-label">THREATS</span>
+            </div>
+          </div>
+          <button className="fs-btn-close" onClick={handleClose}>
+            <span>✕</span>
+            <span>EXIT</span>
+          </button>
+        </div>
+      </header>
+      
+      {/* Main content */}
+      <main className="fs-main">
+        {isLoading && (
+          <div className="fs-loading">
+            <div className="fs-loader"></div>
+            <p className="fs-loading-text">{loadingStatus}</p>
+            <div className="fs-loading-progress">
+              <div className="fs-loading-bar"></div>
+            </div>
+          </div>
+        )}
+        
+        {error && (
+          <div className="fs-error">
+            <div className="fs-error-icon">⚠</div>
+            <p>{error}</p>
+            <button onClick={() => setError(null)}>DISMISS</button>
+          </div>
+        )}
+        
+        <div className="fs-video-container">
+          <video
+            ref={videoRef}
+            playsInline
+            muted
+            className="fs-video"
+          />
+          <canvas ref={canvasRef} className="fs-detection-canvas" />
+          <canvas ref={fluidCanvasRef} className="fs-fluid-canvas" />
+          
+          {/* Tactical overlay */}
+          <div className="fs-tactical-overlay">
+            <div className="fs-corner fs-corner-tl"></div>
+            <div className="fs-corner fs-corner-tr"></div>
+            <div className="fs-corner fs-corner-bl"></div>
+            <div className="fs-corner fs-corner-br"></div>
+            <div className="fs-crosshair"></div>
+          </div>
+          
+          {/* HUD elements */}
+          <div className="fs-hud">
+            <div className="fs-hud-timestamp">
+              {new Date().toLocaleTimeString('en-US', { hour12: false })}
+            </div>
+            <div className="fs-hud-model">
+              {modelType === 'yolov8' ? 'YOLOV8 ONNX' : 'COCO-SSD'} ACTIVE
+            </div>
+          </div>
+        </div>
+        
+        {/* Side panel */}
+        <aside className="fs-sidebar">
+          <div className="fs-panel">
+            <h3 className="fs-panel-title">THREAT STATUS</h3>
+            <div className={`fs-threat-status threat-${threatLevel}`}>
+              <div className="fs-threat-level-display">
+                <span className="fs-threat-level-icon"></span>
+                <span className="fs-threat-level-text">{getThreatLabel(threatLevel)}</span>
+              </div>
+            </div>
+          </div>
+          
+          <div className="fs-panel">
+            <h3 className="fs-panel-title">ACTIVE DETECTIONS</h3>
+            {detections.length === 0 ? (
+              <p className="fs-no-detections">No objects detected</p>
+            ) : (
+              <ul className="fs-detection-list">
+                {detections.slice(0, 8).map((detection, index) => (
+                  <li key={index} className="fs-detection-item">
+                    <span 
+                      className="fs-detection-dot"
+                      style={{ backgroundColor: getTypeColor(detection.classification.type) }}
+                    ></span>
+                    <span className="fs-detection-label">{detection.classification.label}</span>
+                    <span className="fs-detection-confidence">
+                      {Math.round(detection.confidence * 100)}%
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+          
+          {activeThreats.length > 0 && (
+            <div className="fs-panel fs-panel-alert">
+              <h3 className="fs-panel-title">⚠ THREAT ALERT</h3>
+              <ul className="fs-threat-list">
+                {activeThreats.map((threat, index) => (
+                  <li key={index} className="fs-threat-item">
+                    <span 
+                      className="fs-threat-type-dot"
+                      style={{ backgroundColor: getThreatColor(threat.classification.threat) }}
+                    ></span>
+                    <span className="fs-threat-type-label">{threat.classification.label}</span>
+                    <span 
+                      className="fs-threat-type-level"
+                      style={{ color: getThreatColor(threat.classification.threat) }}
+                    >
+                      {threat.classification.threat.toUpperCase()}
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+        </aside>
+      </main>
+      
+      {/* Footer */}
+      <footer className="fs-footer">
+        <div className="fs-footer-left">
+          <span className="fs-recording-indicator"></span>
+          <span>OPTICAL TRACKING ACTIVE</span>
+        </div>
+        <div className="fs-footer-center">
+          Point camera at sky to detect aerial threats
+        </div>
+        <div className="fs-footer-right">
+          {cameraActive && <span className="fs-camera-active">● CAMERA ONLINE</span>}
+        </div>
+      </footer>
+    </div>
+  );
+}
+
+export default FullScreenCamera;

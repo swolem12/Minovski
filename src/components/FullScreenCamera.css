@@ -1,0 +1,687 @@
+/* Full Screen Camera - Defense Tech Style */
+
+.fullscreen-camera {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: #050508;
+  z-index: 10000;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+/* Header */
+.fs-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 20px;
+  background: rgba(5, 5, 8, 0.95);
+  border-bottom: 1px solid rgba(0, 212, 255, 0.1);
+  backdrop-filter: blur(12px);
+  z-index: 10;
+}
+
+.fs-header-left {
+  display: flex;
+  align-items: center;
+  gap: 20px;
+}
+
+.fs-logo {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.fs-logo-icon {
+  font-size: 20px;
+  color: #00d4ff;
+  text-shadow: 0 0 15px #00d4ff;
+}
+
+.fs-logo-text {
+  font-size: 16px;
+  font-weight: 700;
+  letter-spacing: 4px;
+  color: #f0f2f5;
+}
+
+.fs-mode-badge {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 12px;
+  background: rgba(0, 212, 255, 0.1);
+  border: 1px solid rgba(0, 212, 255, 0.3);
+  border-radius: 4px;
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 1px;
+  color: #00d4ff;
+}
+
+.fs-mode-dot {
+  width: 6px;
+  height: 6px;
+  background: #00d4ff;
+  border-radius: 50%;
+  animation: modePulse 1.5s infinite;
+}
+
+@keyframes modePulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.4; }
+}
+
+.fs-header-center {
+  flex: 1;
+  display: flex;
+  justify-content: center;
+}
+
+.fs-threat-indicator {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 20px;
+  border-radius: 4px;
+  font-size: 14px;
+  font-weight: 700;
+  letter-spacing: 2px;
+  text-transform: uppercase;
+  transition: all 0.3s ease;
+}
+
+.fs-threat-indicator.threat-none {
+  background: rgba(34, 197, 94, 0.1);
+  border: 1px solid rgba(34, 197, 94, 0.3);
+  color: #22c55e;
+}
+
+.fs-threat-indicator.threat-info {
+  background: rgba(59, 130, 246, 0.1);
+  border: 1px solid rgba(59, 130, 246, 0.3);
+  color: #3b82f6;
+}
+
+.fs-threat-indicator.threat-low {
+  background: rgba(234, 179, 8, 0.1);
+  border: 1px solid rgba(234, 179, 8, 0.3);
+  color: #eab308;
+}
+
+.fs-threat-indicator.threat-medium {
+  background: rgba(249, 115, 22, 0.1);
+  border: 1px solid rgba(249, 115, 22, 0.3);
+  color: #f97316;
+}
+
+.fs-threat-indicator.threat-high {
+  background: rgba(239, 68, 68, 0.1);
+  border: 1px solid rgba(239, 68, 68, 0.3);
+  color: #ef4444;
+  animation: threatPulse 1s infinite;
+}
+
+.fs-threat-indicator.threat-critical {
+  background: rgba(220, 38, 38, 0.2);
+  border: 1px solid rgba(220, 38, 38, 0.5);
+  color: #dc2626;
+  animation: criticalPulse 0.5s infinite;
+}
+
+@keyframes threatPulse {
+  0%, 100% { box-shadow: 0 0 10px rgba(239, 68, 68, 0.3); }
+  50% { box-shadow: 0 0 20px rgba(239, 68, 68, 0.5); }
+}
+
+@keyframes criticalPulse {
+  0%, 100% { box-shadow: 0 0 15px rgba(220, 38, 38, 0.5); }
+  50% { box-shadow: 0 0 30px rgba(220, 38, 38, 0.8); }
+}
+
+.fs-threat-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: currentColor;
+  animation: dotPulse 2s infinite;
+}
+
+@keyframes dotPulse {
+  0%, 100% { transform: scale(1); opacity: 1; }
+  50% { transform: scale(1.2); opacity: 0.7; }
+}
+
+.fs-header-right {
+  display: flex;
+  align-items: center;
+  gap: 20px;
+}
+
+.fs-stats {
+  display: flex;
+  gap: 16px;
+}
+
+.fs-stat {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 6px 14px;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  border-radius: 4px;
+}
+
+.fs-stat-value {
+  font-size: 20px;
+  font-weight: 700;
+  color: #00d4ff;
+  font-variant-numeric: tabular-nums;
+}
+
+.fs-stat-label {
+  font-size: 9px;
+  color: #5a5d68;
+  letter-spacing: 1px;
+}
+
+.fs-btn-close {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 18px;
+  background: rgba(239, 68, 68, 0.1);
+  border: 1px solid rgba(239, 68, 68, 0.3);
+  border-radius: 4px;
+  color: #ef4444;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 1px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.fs-btn-close:hover {
+  background: #ef4444;
+  color: white;
+}
+
+/* Main content */
+.fs-main {
+  flex: 1;
+  display: flex;
+  position: relative;
+  overflow: hidden;
+}
+
+.fs-video-container {
+  flex: 1;
+  position: relative;
+  background: #050508;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.fs-video {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  background: #050508;
+}
+
+.fs-detection-canvas,
+.fs-fluid-canvas {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+}
+
+.fs-fluid-canvas {
+  mix-blend-mode: screen;
+}
+
+/* Tactical overlay */
+.fs-tactical-overlay {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  pointer-events: none;
+  background: 
+    linear-gradient(90deg, rgba(0, 212, 255, 0.02) 1px, transparent 1px),
+    linear-gradient(rgba(0, 212, 255, 0.02) 1px, transparent 1px);
+  background-size: 60px 60px;
+}
+
+.fs-corner {
+  position: absolute;
+  width: 60px;
+  height: 60px;
+  border-color: rgba(0, 212, 255, 0.5);
+  border-style: solid;
+}
+
+.fs-corner-tl {
+  top: 20px;
+  left: 20px;
+  border-width: 2px 0 0 2px;
+}
+
+.fs-corner-tr {
+  top: 20px;
+  right: 20px;
+  border-width: 2px 2px 0 0;
+}
+
+.fs-corner-bl {
+  bottom: 20px;
+  left: 20px;
+  border-width: 0 0 2px 2px;
+}
+
+.fs-corner-br {
+  bottom: 20px;
+  right: 20px;
+  border-width: 0 2px 2px 0;
+}
+
+.fs-crosshair {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: 40px;
+  height: 40px;
+}
+
+.fs-crosshair::before,
+.fs-crosshair::after {
+  content: '';
+  position: absolute;
+  background: rgba(0, 212, 255, 0.4);
+}
+
+.fs-crosshair::before {
+  width: 1px;
+  height: 100%;
+  left: 50%;
+  transform: translateX(-50%);
+}
+
+.fs-crosshair::after {
+  width: 100%;
+  height: 1px;
+  top: 50%;
+  transform: translateY(-50%);
+}
+
+/* HUD elements */
+.fs-hud {
+  position: absolute;
+  bottom: 20px;
+  left: 20px;
+  right: 20px;
+  display: flex;
+  justify-content: space-between;
+  pointer-events: none;
+}
+
+.fs-hud-timestamp,
+.fs-hud-model {
+  padding: 6px 12px;
+  background: rgba(0, 0, 0, 0.6);
+  border: 1px solid rgba(0, 212, 255, 0.2);
+  border-radius: 4px;
+  font-size: 11px;
+  font-family: 'SF Mono', 'Fira Code', monospace;
+  color: #00d4ff;
+  letter-spacing: 1px;
+}
+
+/* Sidebar */
+.fs-sidebar {
+  width: 280px;
+  background: rgba(10, 11, 15, 0.95);
+  border-left: 1px solid rgba(255, 255, 255, 0.06);
+  display: flex;
+  flex-direction: column;
+  overflow-y: auto;
+}
+
+.fs-panel {
+  padding: 16px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.fs-panel-alert {
+  background: rgba(239, 68, 68, 0.05);
+}
+
+.fs-panel-title {
+  font-size: 10px;
+  font-weight: 600;
+  color: #5a5d68;
+  letter-spacing: 1.5px;
+  margin-bottom: 12px;
+  text-transform: uppercase;
+}
+
+.fs-threat-status {
+  padding: 12px;
+  border-radius: 6px;
+  text-align: center;
+}
+
+.fs-threat-status.threat-none { background: rgba(34, 197, 94, 0.1); }
+.fs-threat-status.threat-low { background: rgba(234, 179, 8, 0.1); }
+.fs-threat-status.threat-medium { background: rgba(249, 115, 22, 0.1); }
+.fs-threat-status.threat-high { background: rgba(239, 68, 68, 0.1); }
+.fs-threat-status.threat-critical { background: rgba(220, 38, 38, 0.15); }
+
+.fs-threat-level-display {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+}
+
+.fs-threat-level-icon {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  animation: iconPulse 2s infinite;
+}
+
+.threat-none .fs-threat-level-icon { background: #22c55e; }
+.threat-low .fs-threat-level-icon { background: #eab308; }
+.threat-medium .fs-threat-level-icon { background: #f97316; }
+.threat-high .fs-threat-level-icon { background: #ef4444; }
+.threat-critical .fs-threat-level-icon { background: #dc2626; }
+
+@keyframes iconPulse {
+  0%, 100% { transform: scale(1); }
+  50% { transform: scale(1.2); }
+}
+
+.fs-threat-level-text {
+  font-size: 14px;
+  font-weight: 700;
+  letter-spacing: 1px;
+}
+
+.threat-none .fs-threat-level-text { color: #22c55e; }
+.threat-low .fs-threat-level-text { color: #eab308; }
+.threat-medium .fs-threat-level-text { color: #f97316; }
+.threat-high .fs-threat-level-text { color: #ef4444; }
+.threat-critical .fs-threat-level-text { color: #dc2626; }
+
+.fs-no-detections {
+  font-size: 12px;
+  color: #5a5d68;
+  text-align: center;
+  padding: 20px 0;
+}
+
+.fs-detection-list,
+.fs-threat-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+
+.fs-detection-item,
+.fs-threat-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px;
+  background: rgba(255, 255, 255, 0.02);
+  border-radius: 4px;
+  margin-bottom: 6px;
+  border-left: 2px solid transparent;
+}
+
+.fs-detection-item {
+  border-left-color: #00d4ff;
+}
+
+.fs-threat-item {
+  border-left-color: #ef4444;
+}
+
+.fs-detection-dot,
+.fs-threat-type-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+}
+
+.fs-detection-label,
+.fs-threat-type-label {
+  flex: 1;
+  font-size: 12px;
+  color: #f0f2f5;
+}
+
+.fs-detection-confidence {
+  font-size: 11px;
+  color: #00d4ff;
+  font-weight: 600;
+}
+
+.fs-threat-type-level {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.5px;
+}
+
+/* Loading state */
+.fs-loading {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  background: rgba(5, 5, 8, 0.98);
+  z-index: 100;
+}
+
+.fs-loader {
+  width: 60px;
+  height: 60px;
+  border: 2px solid rgba(0, 212, 255, 0.1);
+  border-top-color: #00d4ff;
+  border-radius: 50%;
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+.fs-loading-text {
+  margin-top: 20px;
+  color: #8b8f9a;
+  font-size: 14px;
+  letter-spacing: 0.5px;
+}
+
+.fs-loading-progress {
+  width: 200px;
+  height: 2px;
+  background: rgba(0, 212, 255, 0.1);
+  border-radius: 1px;
+  margin-top: 16px;
+  overflow: hidden;
+}
+
+.fs-loading-bar {
+  width: 40%;
+  height: 100%;
+  background: #00d4ff;
+  animation: loadingBar 1.5s ease infinite;
+}
+
+@keyframes loadingBar {
+  0% { transform: translateX(-100%); }
+  100% { transform: translateX(350%); }
+}
+
+/* Error state */
+.fs-error {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  background: rgba(5, 5, 8, 0.98);
+  z-index: 100;
+  text-align: center;
+  padding: 20px;
+}
+
+.fs-error-icon {
+  font-size: 48px;
+  margin-bottom: 16px;
+  color: #ef4444;
+}
+
+.fs-error p {
+  color: #ef4444;
+  font-size: 14px;
+  margin-bottom: 20px;
+  max-width: 300px;
+}
+
+.fs-error button {
+  padding: 12px 24px;
+  background: #ef4444;
+  color: white;
+  border: none;
+  border-radius: 4px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.fs-error button:hover {
+  background: #dc2626;
+}
+
+/* Footer */
+.fs-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 20px;
+  background: rgba(5, 5, 8, 0.95);
+  border-top: 1px solid rgba(255, 255, 255, 0.06);
+  font-size: 11px;
+  color: #5a5d68;
+}
+
+.fs-footer-left {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.fs-recording-indicator {
+  width: 8px;
+  height: 8px;
+  background: #ef4444;
+  border-radius: 50%;
+  animation: recordingPulse 1s infinite;
+}
+
+@keyframes recordingPulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.3; }
+}
+
+.fs-footer-center {
+  color: #8b8f9a;
+}
+
+.fs-camera-active {
+  color: #22c55e;
+  font-weight: 600;
+}
+
+/* Responsive */
+@media (max-width: 900px) {
+  .fs-sidebar {
+    display: none;
+  }
+  
+  .fs-header {
+    flex-wrap: wrap;
+    gap: 10px;
+    padding: 10px 16px;
+  }
+  
+  .fs-header-center {
+    order: 3;
+    width: 100%;
+    justify-content: center;
+  }
+  
+  .fs-mode-badge {
+    display: none;
+  }
+  
+  .fs-stats {
+    display: none;
+  }
+}
+
+@media (max-width: 480px) {
+  .fs-header {
+    padding: 8px 12px;
+  }
+  
+  .fs-logo-text {
+    font-size: 14px;
+    letter-spacing: 2px;
+  }
+  
+  .fs-threat-indicator {
+    padding: 6px 14px;
+    font-size: 12px;
+  }
+  
+  .fs-btn-close {
+    padding: 8px 12px;
+    font-size: 10px;
+  }
+  
+  .fs-footer {
+    flex-direction: column;
+    gap: 6px;
+    text-align: center;
+  }
+  
+  .fs-corner {
+    width: 30px;
+    height: 30px;
+  }
+}
