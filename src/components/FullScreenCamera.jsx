@@ -253,7 +253,20 @@ function FullScreenCamera({ onClose, onDetections, onThreatLevel }) {
           if (TRACKABLE_TYPES.includes(classification.type)) {
             const normalizedX = boundingBox.centerX / canvas.width;
             const normalizedY = boundingBox.centerY / canvas.height;
-            fluidSimRef.current?.addTrailPoint(normalizedX, normalizedY, classification.type);
+            // Create unique object ID for trajectory tracking
+            const objectId = `${classification.type}_${Math.round(boundingBox.x)}_${Math.round(boundingBox.y)}`;
+            fluidSimRef.current?.addTrailPoint(normalizedX, normalizedY, classification.type, objectId);
+            
+            // For person detections, also track estimated hand positions for movement tracking
+            if (classification.type === 'person') {
+              // Estimate left and right hand positions (lower sides of bounding box)
+              const leftHandX = (boundingBox.x + boundingBox.width * 0.15) / canvas.width;
+              const rightHandX = (boundingBox.x + boundingBox.width * 0.85) / canvas.width;
+              const handsY = (boundingBox.y + boundingBox.height * 0.6) / canvas.height;
+              
+              fluidSimRef.current?.addTrailPoint(leftHandX, handsY, 'hand', `${objectId}_left_hand`);
+              fluidSimRef.current?.addTrailPoint(rightHandX, handsY, 'hand', `${objectId}_right_hand`);
+            }
           }
         }
         
@@ -350,7 +363,7 @@ function FullScreenCamera({ onClose, onDetections, onThreatLevel }) {
             </div>
           </div>
           <button className="fs-btn-close" onClick={handleClose}>
-            <span>✕</span>
+            <span>×</span>
             <span>EXIT</span>
           </button>
         </div>
@@ -370,7 +383,7 @@ function FullScreenCamera({ onClose, onDetections, onThreatLevel }) {
         
         {error && (
           <div className="fs-error">
-            <div className="fs-error-icon">⚠</div>
+            <div className="fs-error-icon">!</div>
             <p>{error}</p>
             <button onClick={() => setError(null)}>DISMISS</button>
           </div>
@@ -442,7 +455,7 @@ function FullScreenCamera({ onClose, onDetections, onThreatLevel }) {
           
           {activeThreats.length > 0 && (
             <div className="fs-panel fs-panel-alert">
-              <h3 className="fs-panel-title">⚠ THREAT ALERT</h3>
+              <h3 className="fs-panel-title">! THREAT ALERT</h3>
               <ul className="fs-threat-list">
                 {activeThreats.map((threat, index) => (
                   <li key={index} className="fs-threat-item">

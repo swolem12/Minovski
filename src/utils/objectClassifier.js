@@ -32,7 +32,7 @@ const MIN_CONFIDENCE = 0.5;
 export const AERIAL_THREAT_TYPES = ['drone', 'quadcopter', 'fixed-wing', 'helicopter'];
 
 // All trackable types that should have Minovsky particle trails
-export const TRACKABLE_TYPES = ['drone', 'quadcopter', 'fixed-wing', 'helicopter', 'person', 'vehicle'];
+export const TRACKABLE_TYPES = ['drone', 'quadcopter', 'fixed-wing', 'helicopter', 'person', 'hand', 'vehicle'];
 
 // Simulated drone detection keywords for demo purposes
 // In production, you'd use a custom-trained model
@@ -159,6 +159,7 @@ export function getTypeColor(type) {
     helicopter: '#a855f7',
     vehicle: '#22c55e',
     person: '#06b6d4',
+    hand: '#10b981',  // Emerald green for hands
     object: '#eab308',
     unknown: '#6b7280'
   };

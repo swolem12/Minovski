@@ -22,9 +22,13 @@ class FluidSimulation {
     this.enabled = true;
     this.particles = [];
     this.trails = [];
-    this.maxTrails = 200; // More particles for dense Minovsky field
+    this.maxTrails = 500; // Increased for longer trailing effect
     this.time = 0;
     this.interferenceWaves = [];
+    
+    // Track object positions for trajectory trail effect
+    this.trackedObjects = new Map(); // objectId -> {positions: [{x, y, timestamp}], lastSeen}
+    this.maxPositionHistory = 30; // Number of historical positions to track
     
     this.initGL();
   }
@@ -159,12 +163,42 @@ class FluidSimulation {
   /**
    * Add Minovsky particle trail for a detected object
    * Creates characteristic pink/magenta ionized particles with interference patterns
+   * Trails flow behind the moving object to show trajectory
    * @param {number} x - X position (0-1)
    * @param {number} y - Y position (0-1)
    * @param {string} type - Object type for color intensity
+   * @param {string} objectId - Optional unique ID for tracking object trajectory
    */
-  addTrailPoint(x, y, type = 'drone') {
+  addTrailPoint(x, y, type = 'drone', objectId = null) {
     if (!this.enabled) return;
+    
+    // Generate object ID if not provided (for backward compatibility)
+    const trackId = objectId || `${type}_${Math.round(x * 100)}_${Math.round(y * 100)}`;
+    
+    // Track object position history for trajectory trail effect
+    const now = Date.now();
+    if (!this.trackedObjects.has(trackId)) {
+      this.trackedObjects.set(trackId, { positions: [], lastSeen: now });
+    }
+    
+    const objectData = this.trackedObjects.get(trackId);
+    objectData.lastSeen = now;
+    objectData.positions.push({ x, y, timestamp: now });
+    
+    // Keep only recent positions for trajectory
+    if (objectData.positions.length > this.maxPositionHistory) {
+      objectData.positions.shift();
+    }
+    
+    // Calculate velocity from position history to create directional trailing effect
+    let velocityX = 0;
+    let velocityY = 0;
+    if (objectData.positions.length >= 2) {
+      const prev = objectData.positions[objectData.positions.length - 2];
+      const curr = objectData.positions[objectData.positions.length - 1];
+      velocityX = curr.x - prev.x;
+      velocityY = curr.y - prev.y;
+    }
     
     // Minovsky particle colors - characteristic pink/magenta with variations
     const minovskyColors = {
@@ -187,7 +221,8 @@ class FluidSimulation {
       'fixed-wing': 0.8,
       helicopter: 1.1,
       vehicle: 0.6,
-      person: 0.9,
+      person: 1.0,  // Increased intensity for person tracking
+      hand: 1.2,    // High intensity for hand tracking
       default: 0.7
     };
     
@@ -198,6 +233,7 @@ class FluidSimulation {
       'fixed-wing': [0, 0, 0.1], // Slightly more violet
       helicopter: [0, 0.1, 0],  // Slightly more magenta
       person: [0, 0.2, 0.3],    // More cyan/blue for persons
+      hand: [0.1, 0.3, 0.4],    // Cyan/teal for hands
       vehicle: [-0.2, 0.2, 0],  // More green for vehicles
       default: [0, 0, 0]
     };
@@ -213,88 +249,122 @@ class FluidSimulation {
       color[3]
     ];
     
-    // Add core Minovsky particle (bright center)
+    // Create trailing particles behind the object (in the opposite direction of motion)
+    // This creates the "after image" effect showing trajectory
+    const speed = Math.sqrt(velocityX * velocityX + velocityY * velocityY);
+    const hasMotion = speed > 0.001; // Threshold for detecting motion
+    
+    // Add core Minovsky particle (bright center) at current position
     this.trails.push({
       x,
       y,
       color: shiftColor(minovskyColors.core),
-      size: 25 * intensity,
+      size: 28 * intensity,
       life: 1.0,
-      decay: 0.015,
+      decay: 0.008, // Slower decay for longer-lasting trails
       phase: Math.random(),
-      velocityX: (Math.random() - 0.5) * 0.001,
-      velocityY: (Math.random() - 0.5) * 0.001
+      velocityX: -velocityX * 0.3, // Trail flows opposite to motion
+      velocityY: -velocityY * 0.3
     });
     
-    // Add primary Minovsky particles (characteristic pink glow)
-    for (let i = 0; i < 5; i++) {
-      const angle = (i / 5) * Math.PI * 2 + Math.random() * 0.5;
-      const distance = 0.01 + Math.random() * 0.02;
+    // Add trailing particles behind the object for trajectory visualization
+    if (hasMotion) {
+      // Create trail particles along the trajectory behind the object
+      for (let i = 1; i <= 8; i++) {
+        const trailOffset = i * 0.008; // Distance behind object
+        const trailX = x - (velocityX / speed) * trailOffset;
+        const trailY = y - (velocityY / speed) * trailOffset;
+        
+        this.trails.push({
+          x: trailX + (Math.random() - 0.5) * 0.01,
+          y: trailY + (Math.random() - 0.5) * 0.01,
+          color: shiftColor(minovskyColors.primary),
+          size: (22 - i * 1.5) * intensity, // Particles get smaller further from object
+          life: 0.95 - i * 0.05,
+          decay: 0.006 + i * 0.001, // Slower decay for particles closer to object
+          phase: Math.random(),
+          velocityX: -velocityX * 0.5 + (Math.random() - 0.5) * 0.001,
+          velocityY: -velocityY * 0.5 + (Math.random() - 0.5) * 0.001
+        });
+      }
+    }
+    
+    // Add primary Minovsky particles (characteristic pink glow) around current position
+    for (let i = 0; i < 4; i++) {
+      const angle = (i / 4) * Math.PI * 2 + Math.random() * 0.5;
+      const distance = 0.008 + Math.random() * 0.015;
       
       this.trails.push({
         x: x + Math.cos(angle) * distance,
         y: y + Math.sin(angle) * distance,
         color: shiftColor(minovskyColors.primary),
-        size: (15 + Math.random() * 10) * intensity,
+        size: (18 + Math.random() * 8) * intensity,
         life: 0.9,
-        decay: 0.02 + Math.random() * 0.01,
+        decay: 0.012 + Math.random() * 0.006, // Slower decay
         phase: Math.random(),
-        velocityX: Math.cos(angle) * 0.0005,
-        velocityY: Math.sin(angle) * 0.0005
+        velocityX: -velocityX * 0.4 + Math.cos(angle) * 0.0003,
+        velocityY: -velocityY * 0.4 + Math.sin(angle) * 0.0003
       });
     }
     
     // Add hot magenta particles (energy dispersal)
     for (let i = 0; i < 3; i++) {
       this.trails.push({
-        x: x + (Math.random() - 0.5) * 0.03,
-        y: y + (Math.random() - 0.5) * 0.03,
+        x: x + (Math.random() - 0.5) * 0.025 - velocityX * 2,
+        y: y + (Math.random() - 0.5) * 0.025 - velocityY * 2,
         color: shiftColor(minovskyColors.hot),
-        size: (10 + Math.random() * 8) * intensity,
-        life: 0.7,
-        decay: 0.025 + Math.random() * 0.015,
+        size: (12 + Math.random() * 8) * intensity,
+        life: 0.75,
+        decay: 0.015 + Math.random() * 0.008, // Slower decay
         phase: Math.random(),
-        velocityX: (Math.random() - 0.5) * 0.002,
-        velocityY: (Math.random() - 0.5) * 0.002
+        velocityX: -velocityX * 0.6 + (Math.random() - 0.5) * 0.001,
+        velocityY: -velocityY * 0.6 + (Math.random() - 0.5) * 0.001
       });
     }
     
-    // Add dispersed violet particles (interference field)
+    // Add dispersed violet particles (interference field) - trailing behind
     for (let i = 0; i < 4; i++) {
       this.trails.push({
-        x: x + (Math.random() - 0.5) * 0.05,
-        y: y + (Math.random() - 0.5) * 0.05,
+        x: x + (Math.random() - 0.5) * 0.04 - velocityX * 4,
+        y: y + (Math.random() - 0.5) * 0.04 - velocityY * 4,
         color: shiftColor(minovskyColors.dispersed),
-        size: (8 + Math.random() * 6) * intensity,
-        life: 0.6,
-        decay: 0.03 + Math.random() * 0.02,
+        size: (10 + Math.random() * 6) * intensity,
+        life: 0.65,
+        decay: 0.018 + Math.random() * 0.01, // Slower decay
         phase: Math.random(),
-        velocityX: (Math.random() - 0.5) * 0.003,
-        velocityY: (Math.random() - 0.5) * 0.003
+        velocityX: -velocityX * 0.7 + (Math.random() - 0.5) * 0.002,
+        velocityY: -velocityY * 0.7 + (Math.random() - 0.5) * 0.002
       });
     }
     
-    // Add I-field interaction particles (blue-shifted outer ring)
-    for (let i = 0; i < 2; i++) {
+    // Add I-field interaction particles (blue-shifted outer ring) - far trailing
+    for (let i = 0; i < 3; i++) {
       const angle = Math.random() * Math.PI * 2;
-      const distance = 0.04 + Math.random() * 0.02;
+      const distance = 0.03 + Math.random() * 0.02;
       
       this.trails.push({
-        x: x + Math.cos(angle) * distance,
-        y: y + Math.sin(angle) * distance,
+        x: x + Math.cos(angle) * distance - velocityX * 6,
+        y: y + Math.sin(angle) * distance - velocityY * 6,
         color: shiftColor(minovskyColors.iField),
-        size: (6 + Math.random() * 4) * intensity,
-        life: 0.5,
-        decay: 0.035,
+        size: (8 + Math.random() * 4) * intensity,
+        life: 0.55,
+        decay: 0.02,
         phase: Math.random(),
-        velocityX: Math.cos(angle) * 0.001,
-        velocityY: Math.sin(angle) * 0.001
+        velocityX: -velocityX * 0.5 + Math.cos(angle) * 0.0008,
+        velocityY: -velocityY * 0.5 + Math.sin(angle) * 0.0008
       });
     }
     
     // Limit trails
     if (this.trails.length > this.maxTrails) {
       this.trails = this.trails.slice(-this.maxTrails);
+    }
+    
+    // Clean up old tracked objects (not seen for > 2 seconds)
+    for (const [id, data] of this.trackedObjects.entries()) {
+      if (now - data.lastSeen > 2000) {
+        this.trackedObjects.delete(id);
+      }
     }
   }
   
@@ -311,18 +381,18 @@ class FluidSimulation {
     this.trails = this.trails.filter(trail => {
       trail.life -= trail.decay;
       trail.color[3] = trail.life * trail.life; // Quadratic falloff for smoother fade
-      trail.size *= 0.985; // Gradual size reduction
+      trail.size *= 0.992; // Slower size reduction for longer-lasting trails
       
-      // Apply velocity for particle drift
+      // Apply velocity for particle drift (trailing effect)
       if (trail.velocityX) {
         trail.x += trail.velocityX;
         trail.y += trail.velocityY;
-        // Slow down velocity (particle deceleration in Minovsky field)
-        trail.velocityX *= 0.98;
-        trail.velocityY *= 0.98;
+        // Slower deceleration to maintain trail flow longer
+        trail.velocityX *= 0.985;
+        trail.velocityY *= 0.985;
       }
       
-      return trail.life > 0.05;
+      return trail.life > 0.03;
     });
     
     if (this.trails.length === 0) return;
@@ -380,6 +450,7 @@ class FluidSimulation {
   
   clear() {
     this.trails = [];
+    this.trackedObjects.clear();
     this.time = 0;
     if (this.enabled) {
       this.gl.clearColor(0, 0, 0, 0);

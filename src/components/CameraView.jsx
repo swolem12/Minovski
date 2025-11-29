@@ -259,7 +259,20 @@ function CameraView({ onDetections, onThreatLevel, isActive = true }) {
           if (TRACKABLE_TYPES.includes(classification.type)) {
             const normalizedX = boundingBox.centerX / canvas.width;
             const normalizedY = boundingBox.centerY / canvas.height;
-            fluidSimRef.current?.addTrailPoint(normalizedX, normalizedY, classification.type);
+            // Create unique object ID for trajectory tracking
+            const objectId = `${classification.type}_${Math.round(boundingBox.x)}_${Math.round(boundingBox.y)}`;
+            fluidSimRef.current?.addTrailPoint(normalizedX, normalizedY, classification.type, objectId);
+            
+            // For person detections, also track estimated hand positions for movement tracking
+            if (classification.type === 'person') {
+              // Estimate left and right hand positions (lower sides of bounding box)
+              const leftHandX = (boundingBox.x + boundingBox.width * 0.15) / canvas.width;
+              const rightHandX = (boundingBox.x + boundingBox.width * 0.85) / canvas.width;
+              const handsY = (boundingBox.y + boundingBox.height * 0.6) / canvas.height;
+              
+              fluidSimRef.current?.addTrailPoint(leftHandX, handsY, 'hand', `${objectId}_left_hand`);
+              fluidSimRef.current?.addTrailPoint(rightHandX, handsY, 'hand', `${objectId}_right_hand`);
+            }
           }
         }
         
@@ -321,7 +334,7 @@ function CameraView({ onDetections, onThreatLevel, isActive = true }) {
       
       {error && (
         <div className="error-overlay">
-          <div className="error-icon">⚠️</div>
+          <div className="error-icon">!</div>
           <p>{error}</p>
           <button onClick={() => setError(null)}>Dismiss</button>
         </div>
@@ -330,7 +343,7 @@ function CameraView({ onDetections, onThreatLevel, isActive = true }) {
       {!cameraActive && !isLoading && !error && (
         <div className="permission-overlay">
           <div className="permission-content">
-            <div className="permission-icon">🎯</div>
+            <div className="permission-icon">◎</div>
             <h2>Start Threat Detection</h2>
             <p>
               MINOVSKI needs access to your camera to detect and track aerial threats.
@@ -345,7 +358,7 @@ function CameraView({ onDetections, onThreatLevel, isActive = true }) {
               className="btn-start-tracking"
               onClick={requestCameraPermission}
             >
-              <span className="btn-icon">📡</span>
+              <span className="btn-icon">▶</span>
               <span className="btn-text">Start Tracking</span>
               <span className="btn-subtitle">Requires Camera Permission</span>
             </button>
