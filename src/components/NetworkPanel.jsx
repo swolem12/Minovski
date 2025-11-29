@@ -3,7 +3,7 @@ import { animate } from 'animejs';
 import peerNetwork from '../utils/peerNetwork';
 import './NetworkPanel.css';
 
-function NetworkPanel({ onRemoteDetection }) {
+function NetworkPanel({ onRemoteDetection, onViewSwitch }) {
   const [isConnected, setIsConnected] = useState(false);
   const [deviceId, setDeviceId] = useState('');
   const [peers, setPeers] = useState([]);
@@ -11,6 +11,8 @@ function NetworkPanel({ onRemoteDetection }) {
   const [joinRoomId, setJoinRoomId] = useState('');
   const [remoteAlerts, setRemoteAlerts] = useState([]);
   const [isExpanded, setIsExpanded] = useState(false);
+  const [isHost, setIsHost] = useState(false);
+  const [activeViewDevice, setActiveViewDevice] = useState(null);
   const panelRef = useRef(null);
   const alertsRef = useRef(null);
   
@@ -67,18 +69,25 @@ function NetworkPanel({ onRemoteDetection }) {
       animateAlert();
     });
     
+    const unsubViewSwitch = peerNetwork.on('view-switch', ({ peerId, targetDevice }) => {
+      setActiveViewDevice(targetDevice);
+      onViewSwitch?.({ targetDevice, fromHost: peerId });
+    });
+    
     return () => {
       unsubConnected();
       unsubDisconnected();
       unsubRemoteDetection();
       unsubRemoteAlert();
+      unsubViewSwitch();
       peerNetwork.disconnect();
     };
-  }, [onRemoteDetection, animateNewPeer, animateAlert]);
+  }, [onRemoteDetection, onViewSwitch, animateNewPeer, animateAlert]);
   
   const handleCreateRoom = () => {
     const room = peerNetwork.createRoom();
     setRoomId(room);
+    setIsHost(true);
     
     animate('.room-id', {
       scale: [0.8, 1.1, 1],
@@ -131,6 +140,21 @@ function NetworkPanel({ onRemoteDetection }) {
         ease: 'outQuad'
       });
     }
+  };
+  
+  const handleViewSwitch = (targetDeviceId) => {
+    if (!isHost) return;
+    
+    peerNetwork.broadcastViewSwitch(targetDeviceId);
+    setActiveViewDevice(targetDeviceId);
+    onViewSwitch?.({ targetDevice: targetDeviceId, fromHost: deviceId });
+    
+    // Animate the selected device
+    animate(`.peer-item[data-peer="${targetDeviceId}"]`, {
+      backgroundColor: ['rgba(0, 212, 255, 0.3)', 'rgba(255, 255, 255, 0.02)'],
+      duration: 500,
+      ease: 'outQuad'
+    });
   };
 
   return (
@@ -216,12 +240,28 @@ function NetworkPanel({ onRemoteDetection }) {
           {peers.length > 0 && (
             <div className="peers-list">
               <h4>Connected Devices:</h4>
+              {isHost && (
+                <p className="host-hint">Click &quot;View&quot; to switch to a device&apos;s camera feed</p>
+              )}
               <ul>
                 {peers.map((peer) => (
-                  <li key={peer} className="peer-item">
+                  <li 
+                    key={peer} 
+                    className={`peer-item ${activeViewDevice === peer ? 'active-view' : ''}`}
+                    data-peer={peer}
+                  >
                     <span className="peer-icon">📱</span>
                     <span className="peer-id">{peer}</span>
                     <span className="peer-status">Active</span>
+                    {isHost && (
+                      <button 
+                        className={`btn-view-switch ${activeViewDevice === peer ? 'viewing' : ''}`}
+                        onClick={() => handleViewSwitch(peer)}
+                        title="Switch to this device's view"
+                      >
+                        {activeViewDevice === peer ? '👁 Viewing' : '👁 View'}
+                      </button>
+                    )}
                   </li>
                 ))}
               </ul>

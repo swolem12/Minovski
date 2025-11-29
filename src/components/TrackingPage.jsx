@@ -3,6 +3,7 @@ import { animate, utils } from 'animejs';
 import CameraView from './CameraView';
 import ThreatDisplay from './ThreatDisplay';
 import NetworkPanel from './NetworkPanel';
+import ChatPanel from './ChatPanel';
 import FullScreenCamera from './FullScreenCamera';
 import peerNetwork from '../utils/peerNetwork';
 import audioAlert from '../utils/audioAlert';
@@ -15,6 +16,7 @@ function TrackingPage({ onBackToHome }) {
   const [remoteDetections, setRemoteDetections] = useState([]);
   const [isActive] = useState(true);
   const [isFullScreen, setIsFullScreen] = useState(false);
+  const [activeViewDevice, setActiveViewDevice] = useState(null);
   const containerRef = useRef(null);
   const headerRef = useRef(null);
   
@@ -96,6 +98,13 @@ function TrackingPage({ onBackToHome }) {
   const totalThreats = detections.filter(isAerialThreat).length + 
     remoteDetections.reduce((acc, rd) => acc + (rd.detection.threats?.length || 0), 0);
   
+  // Handle view switch from host
+  const handleViewSwitch = ({ targetDevice }) => {
+    setActiveViewDevice(targetDevice);
+    // Notify user about view switch
+    console.log(`View switched to device: ${targetDevice}`);
+  };
+  
   const handleBackClick = () => {
     // Exit animation with null check
     if (containerRef.current) {
@@ -158,6 +167,11 @@ function TrackingPage({ onBackToHome }) {
             <h2 className="camera-section-title">
               <span className="camera-title-icon">◉</span>
               OPTICAL FEED
+              {activeViewDevice && (
+                <span className="remote-view-badge">
+                  📡 Viewing: {activeViewDevice.slice(0, 10)}...
+                </span>
+              )}
             </h2>
             <button className="btn-fullscreen" onClick={openFullScreen}>
               <span className="fullscreen-icon">⛶</span>
@@ -179,7 +193,10 @@ function TrackingPage({ onBackToHome }) {
           
           <NetworkPanel 
             onRemoteDetection={handleRemoteDetection}
+            onViewSwitch={handleViewSwitch}
           />
+          
+          <ChatPanel />
           
           {remoteDetections.length > 0 && (
             <div className="remote-detections">
