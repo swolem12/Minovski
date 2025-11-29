@@ -54,9 +54,9 @@ function FullScreenCamera({ onClose, onDetections, onThreatLevel }) {
       try {
         setIsLoading(true);
         
-        // Initialize OpenCV for contour detection (non-blocking)
+        // Initialize OpenCV for contour detection (start early, await later)
         setLoadingStatus('Initializing contour detection...');
-        initOpenCV().catch(err => {
+        const openCVPromise = initOpenCV().catch(err => {
           console.warn('OpenCV initialization failed, will use fallback outlines:', err);
         });
         
@@ -68,6 +68,11 @@ function FullScreenCamera({ onClose, onDetections, onThreatLevel }) {
             setModel(yolov8Detector);
             setModelType('yolov8');
             console.log('YOLOv8 model loaded via ONNX Runtime Web');
+            
+            // Wait for OpenCV to be ready before completing
+            setLoadingStatus('Finalizing contour detection...');
+            await openCVPromise;
+            
             setIsLoading(false);
             return;
           } catch (yoloError) {
@@ -87,6 +92,11 @@ function FullScreenCamera({ onClose, onDetections, onThreatLevel }) {
           
           setModel(loadedModel);
           setModelType('coco-ssd');
+          
+          // Wait for OpenCV to be ready before completing
+          setLoadingStatus('Finalizing contour detection...');
+          await openCVPromise;
+          
           setIsLoading(false);
           return;
         } catch (cocoError) {
@@ -99,6 +109,11 @@ function FullScreenCamera({ onClose, onDetections, onThreatLevel }) {
         await demoDetector.load();
         setModel(demoDetector);
         setModelType('demo');
+        
+        // Wait for OpenCV to be ready before completing
+        setLoadingStatus('Finalizing contour detection...');
+        await openCVPromise;
+        
         setIsLoading(false);
         
       } catch (err) {
