@@ -274,6 +274,8 @@ function NetworkPanel({ onRemoteDetection, onViewSwitch, onGridViewToggle }) {
               <div className="room-active">
                 <label>Network ID (share to connect):</label>
                 <div className="room-id">
+                  {/* Hosts display their Device ID (PeerJS peer ID) for others to connect to.
+                      Non-hosts display the roomId which is the host's device ID they connected to. */}
                   <code>{isHost ? deviceId : roomId}</code>
                   <button 
                     className="copy-btn"

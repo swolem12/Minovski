@@ -6,6 +6,9 @@
 import Peer from 'peerjs';
 import { v4 as uuidv4 } from 'uuid';
 
+// Connection timeout in milliseconds
+const CONNECTION_TIMEOUT_MS = 10000;
+
 class PeerNetwork {
   constructor() {
     this.peer = null;
@@ -129,7 +132,7 @@ class PeerNetwork {
       // Set a timeout for connection attempt
       const connectionTimeout = setTimeout(() => {
         reject(new Error('Connection timeout. Host may be offline or unreachable.'));
-      }, 10000); // 10 second timeout
+      }, CONNECTION_TIMEOUT_MS);
       
       conn.on('open', () => {
         clearTimeout(connectionTimeout);
