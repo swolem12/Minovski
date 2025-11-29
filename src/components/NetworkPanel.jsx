@@ -249,17 +249,21 @@ function NetworkPanel({ onRemoteDetection, onViewSwitch, onGridViewToggle }) {
               </>
             ) : (
               <div className="room-active">
-                <label>Network ID:</label>
+                <label>Network ID (share to connect):</label>
                 <div className="room-id">
-                  <code>{roomId}</code>
+                  <code>{isHost ? deviceId : roomId}</code>
                   <button 
                     className="copy-btn"
-                    onClick={() => copyToClipboard(roomId)}
+                    onClick={() => copyToClipboard(isHost ? deviceId : roomId)}
                   >
                     📋
                   </button>
                 </div>
-                <p className="share-hint">Share this ID with other devices to connect</p>
+                <p className="share-hint">
+                  {isHost 
+                    ? 'Share your Device ID with other devices to join your network' 
+                    : `Connected to: ${roomId}`}
+                </p>
               </div>
             )}
           </div>
