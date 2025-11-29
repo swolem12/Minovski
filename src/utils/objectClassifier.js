@@ -31,6 +31,9 @@ const MIN_CONFIDENCE = 0.5;
 // Aerial threat types for consistent filtering across the app
 export const AERIAL_THREAT_TYPES = ['drone', 'quadcopter', 'fixed-wing', 'helicopter'];
 
+// All trackable types that should have Minovsky particle trails
+export const TRACKABLE_TYPES = ['drone', 'quadcopter', 'fixed-wing', 'helicopter', 'person', 'vehicle'];
+
 // Simulated drone detection keywords for demo purposes
 // In production, you'd use a custom-trained model
 const DEMO_KEYWORDS = ['drone', 'quadcopter', 'helicopter', 'aircraft', 'uav', 'suas'];
@@ -172,5 +175,6 @@ export default {
   formatConfidence,
   THREAT_MAPPINGS,
   AERIAL_THREAT_TYPES,
+  TRACKABLE_TYPES,
   MIN_CONFIDENCE
 };

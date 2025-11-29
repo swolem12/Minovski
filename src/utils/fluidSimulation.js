@@ -186,17 +186,38 @@ class FluidSimulation {
       quadcopter: 1.2,
       'fixed-wing': 0.8,
       helicopter: 1.1,
-      vehicle: 0.5,
+      vehicle: 0.6,
+      person: 0.9,
       default: 0.7
     };
     
+    // Color variations for different tracked types
+    const typeColorShift = {
+      drone: [0, 0, 0],         // Default pink
+      quadcopter: [0.1, 0, 0],  // Slightly more red
+      'fixed-wing': [0, 0, 0.1], // Slightly more violet
+      helicopter: [0, 0.1, 0],  // Slightly more magenta
+      person: [0, 0.2, 0.3],    // More cyan/blue for persons
+      vehicle: [-0.2, 0.2, 0],  // More green for vehicles
+      default: [0, 0, 0]
+    };
+    
     const intensity = intensityMap[type] || intensityMap.default;
+    const colorShift = typeColorShift[type] || typeColorShift.default;
+    
+    // Apply color shift to Minovsky colors for this type
+    const shiftColor = (color) => [
+      Math.max(0, Math.min(1, color[0] + colorShift[0])),
+      Math.max(0, Math.min(1, color[1] + colorShift[1])),
+      Math.max(0, Math.min(1, color[2] + colorShift[2])),
+      color[3]
+    ];
     
     // Add core Minovsky particle (bright center)
     this.trails.push({
       x,
       y,
-      color: [...minovskyColors.core],
+      color: shiftColor(minovskyColors.core),
       size: 25 * intensity,
       life: 1.0,
       decay: 0.015,
@@ -213,7 +234,7 @@ class FluidSimulation {
       this.trails.push({
         x: x + Math.cos(angle) * distance,
         y: y + Math.sin(angle) * distance,
-        color: [...minovskyColors.primary],
+        color: shiftColor(minovskyColors.primary),
         size: (15 + Math.random() * 10) * intensity,
         life: 0.9,
         decay: 0.02 + Math.random() * 0.01,
@@ -228,7 +249,7 @@ class FluidSimulation {
       this.trails.push({
         x: x + (Math.random() - 0.5) * 0.03,
         y: y + (Math.random() - 0.5) * 0.03,
-        color: [...minovskyColors.hot],
+        color: shiftColor(minovskyColors.hot),
         size: (10 + Math.random() * 8) * intensity,
         life: 0.7,
         decay: 0.025 + Math.random() * 0.015,
@@ -243,7 +264,7 @@ class FluidSimulation {
       this.trails.push({
         x: x + (Math.random() - 0.5) * 0.05,
         y: y + (Math.random() - 0.5) * 0.05,
-        color: [...minovskyColors.dispersed],
+        color: shiftColor(minovskyColors.dispersed),
         size: (8 + Math.random() * 6) * intensity,
         life: 0.6,
         decay: 0.03 + Math.random() * 0.02,
@@ -261,7 +282,7 @@ class FluidSimulation {
       this.trails.push({
         x: x + Math.cos(angle) * distance,
         y: y + Math.sin(angle) * distance,
-        color: [...minovskyColors.iField],
+        color: shiftColor(minovskyColors.iField),
         size: (6 + Math.random() * 4) * intensity,
         life: 0.5,
         decay: 0.035,

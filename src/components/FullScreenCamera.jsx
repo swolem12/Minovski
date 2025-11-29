@@ -3,7 +3,7 @@ import * as tf from '@tensorflow/tfjs';
 import * as cocoSsd from '@tensorflow-models/coco-ssd';
 import { animate } from 'animejs';
 import FluidSimulation from '../utils/fluidSimulation';
-import { classifyDetections as classifyCocoDetections, getOverallThreatLevel, getTypeColor, getThreatColor, isAerialThreat, formatConfidence, AERIAL_THREAT_TYPES } from '../utils/objectClassifier';
+import { classifyDetections as classifyCocoDetections, getOverallThreatLevel, getTypeColor, getThreatColor, isAerialThreat, formatConfidence, AERIAL_THREAT_TYPES, TRACKABLE_TYPES } from '../utils/objectClassifier';
 import { yolov8Detector } from '../utils/yolov8Detector';
 import audioAlert from '../utils/audioAlert';
 import './FullScreenCamera.css';
@@ -250,7 +250,7 @@ function FullScreenCamera({ onClose, onDetections, onThreatLevel }) {
             boundingBox.y - 7
           );
           
-          if (AERIAL_THREAT_TYPES.includes(classification.type)) {
+          if (TRACKABLE_TYPES.includes(classification.type)) {
             const normalizedX = boundingBox.centerX / canvas.width;
             const normalizedY = boundingBox.centerY / canvas.height;
             fluidSimRef.current?.addTrailPoint(normalizedX, normalizedY, classification.type);
