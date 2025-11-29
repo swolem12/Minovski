@@ -3,9 +3,10 @@ import * as tf from '@tensorflow/tfjs';
 import * as cocoSsd from '@tensorflow-models/coco-ssd';
 import { animate } from 'animejs';
 import FluidSimulation from '../utils/fluidSimulation';
-import { classifyDetections as classifyCocoDetections, getOverallThreatLevel, getTypeColor, getThreatColor, isAerialThreat, formatConfidence, estimateHandPositions, drawCornerBrackets, TRACKABLE_TYPES } from '../utils/objectClassifier';
+import { classifyDetections as classifyCocoDetections, getOverallThreatLevel, getTypeColor, getThreatColor, isAerialThreat, formatConfidence, estimateHandPositions, TRACKABLE_TYPES } from '../utils/objectClassifier';
 import { yolov8Detector } from '../utils/yolov8Detector';
 import { demoDetector } from '../utils/demoDetector';
+import { initOpenCV, isOpenCVReady, extractContours, drawContour, drawFallbackOutline, drawMinimalLabel } from '../utils/contourDetector';
 import audioAlert from '../utils/audioAlert';
 import ChatPanel from './ChatPanel';
 import WalkieTalkie from './WalkieTalkie';
@@ -52,6 +53,12 @@ function FullScreenCamera({ onClose, onDetections, onThreatLevel }) {
     async function loadModel() {
       try {
         setIsLoading(true);
+        
+        // Initialize OpenCV for contour detection (non-blocking)
+        setLoadingStatus('Initializing contour detection...');
+        initOpenCV().catch(err => {
+          console.warn('OpenCV initialization failed, will use fallback outlines:', err);
+        });
         
         if (PREFERRED_MODEL === 'yolov8') {
           try {
@@ -326,6 +333,7 @@ function FullScreenCamera({ onClose, onDetections, onThreatLevel }) {
         
         ctx.clearRect(0, 0, canvas.width, canvas.height);
         
+        // Draw contour outlines instead of bounding boxes
         for (const detection of classifiedDetections) {
           const { boundingBox, classification, confidence } = detection;
           
@@ -335,40 +343,25 @@ function FullScreenCamera({ onClose, onDetections, onThreatLevel }) {
           // Choose color based on threat status: red for threats, green for non-threats
           const strokeColor = isThreat ? THREAT_COLOR : SAFE_COLOR;
           
-          // Draw only the outline around the object (no fill)
-          ctx.strokeStyle = strokeColor;
-          ctx.lineWidth = 3;
-          ctx.setLineDash([]);
-          ctx.strokeRect(
-            boundingBox.x,
-            boundingBox.y,
-            boundingBox.width,
-            boundingBox.height
-          );
+          // Try to extract and draw contour outline using OpenCV
+          if (isOpenCVReady()) {
+            const contourPoints = extractContours(video, boundingBox, 40);
+            if (contourPoints.length > 2) {
+              // Draw the actual shape contour
+              drawContour(ctx, contourPoints, strokeColor, 3, true);
+            } else {
+              // Fallback to stylized outline
+              drawFallbackOutline(ctx, boundingBox, strokeColor, 3);
+            }
+          } else {
+            // OpenCV not ready, use stylized fallback
+            drawFallbackOutline(ctx, boundingBox, strokeColor, 3);
+          }
           
-          // Draw tactical corner brackets for better object outline visibility
-          drawCornerBrackets(ctx, boundingBox, strokeColor, 4);
-          
-          // Draw label with altitude info for aerial threats
-          const altitudeLabel = detection.altitude ? ` [${detection.altitude.label}]` : '';
+          // Draw minimal label (small, non-intrusive)
+          const altitudeLabel = detection.altitude ? ` ${detection.altitude.label}` : '';
           const label = `${classification.label.toUpperCase()} ${formatConfidence(confidence)}${isThreat ? altitudeLabel : ''}`;
-          ctx.font = 'bold 12px Inter, sans-serif';
-          const textWidth = ctx.measureText(label).width;
-          
-          ctx.fillStyle = isThreat ? 'rgba(255, 50, 50, 0.9)' : 'rgba(50, 255, 100, 0.9)';
-          ctx.fillRect(
-            boundingBox.x,
-            boundingBox.y - 22,
-            textWidth + 12,
-            20
-          );
-          
-          ctx.fillStyle = '#ffffff';
-          ctx.fillText(
-            label,
-            boundingBox.x + 6,
-            boundingBox.y - 7
-          );
+          drawMinimalLabel(ctx, label, boundingBox.x, boundingBox.y, strokeColor);
           
           if (TRACKABLE_TYPES.includes(classification.type)) {
             const normalizedX = boundingBox.centerX / canvas.width;

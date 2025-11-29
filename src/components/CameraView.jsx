@@ -3,9 +3,10 @@ import * as tf from '@tensorflow/tfjs';
 import * as cocoSsd from '@tensorflow-models/coco-ssd';
 import { animate } from 'animejs';
 import FluidSimulation from '../utils/fluidSimulation';
-import { classifyDetections as classifyCocoDetections, getOverallThreatLevel, isAerialThreat, estimateHandPositions, drawCornerBrackets, TRACKABLE_TYPES } from '../utils/objectClassifier';
+import { classifyDetections as classifyCocoDetections, getOverallThreatLevel, isAerialThreat, estimateHandPositions, TRACKABLE_TYPES } from '../utils/objectClassifier';
 import { yolov8Detector } from '../utils/yolov8Detector';
 import { demoDetector } from '../utils/demoDetector';
+import { initOpenCV, isOpenCVReady, extractContours, drawContour, drawFallbackOutline, drawMinimalLabel } from '../utils/contourDetector';
 import audioAlert from '../utils/audioAlert';
 import './CameraView.css';
 
@@ -48,6 +49,12 @@ function CameraView({ onDetections, onThreatLevel, onCameraStream, isActive = tr
     async function loadModel() {
       try {
         setIsLoading(true);
+        
+        // Initialize OpenCV for contour detection (non-blocking)
+        setLoadingStatus('Initializing contour detection...');
+        initOpenCV().catch(err => {
+          console.warn('OpenCV initialization failed, will use fallback outlines:', err);
+        });
         
         if (PREFERRED_MODEL === 'yolov8') {
           // Try loading YOLOv8 via ONNX Runtime Web
@@ -355,7 +362,7 @@ function CameraView({ onDetections, onThreatLevel, onCameraStream, isActive = tr
         // Clear canvas
         ctx.clearRect(0, 0, canvas.width, canvas.height);
         
-        // Draw detection boxes and update fluid trails
+        // Draw contour outlines instead of bounding boxes
         for (const detection of classifiedDetections) {
           const { boundingBox, classification, confidence } = detection;
           
@@ -365,42 +372,27 @@ function CameraView({ onDetections, onThreatLevel, onCameraStream, isActive = tr
           // Choose color based on threat status: red for threats, green for non-threats
           const strokeColor = isThreat ? THREAT_COLOR : SAFE_COLOR;
           
-          // Draw only the outline around the object (no fill)
-          ctx.strokeStyle = strokeColor;
-          ctx.lineWidth = 3;
-          ctx.strokeRect(
-            boundingBox.x,
-            boundingBox.y,
-            boundingBox.width,
-            boundingBox.height
-          );
+          // Try to extract and draw contour outline using OpenCV
+          if (isOpenCVReady()) {
+            const contourPoints = extractContours(video, boundingBox, 40);
+            if (contourPoints.length > 2) {
+              // Draw the actual shape contour
+              drawContour(ctx, contourPoints, strokeColor, 3, true);
+            } else {
+              // Fallback to stylized outline
+              drawFallbackOutline(ctx, boundingBox, strokeColor, 3);
+            }
+          } else {
+            // OpenCV not ready, use stylized fallback
+            drawFallbackOutline(ctx, boundingBox, strokeColor, 3);
+          }
           
-          // Draw tactical corner brackets for better object outline visibility
-          drawCornerBrackets(ctx, boundingBox, strokeColor, 4);
-          
-          // Draw label background with altitude info for aerial threats
-          const altitudeLabel = detection.altitude ? ` [${detection.altitude.label}]` : '';
+          // Draw minimal label (small, non-intrusive)
+          const altitudeLabel = detection.altitude ? ` ${detection.altitude.label}` : '';
           const label = `${classification.label} ${Math.round(confidence * 100)}%${isThreat ? altitudeLabel : ''}`;
-          ctx.font = 'bold 14px Inter, sans-serif';
-          const textWidth = ctx.measureText(label).width;
+          drawMinimalLabel(ctx, label, boundingBox.x, boundingBox.y, strokeColor);
           
-          ctx.fillStyle = isThreat ? 'rgba(255, 50, 50, 0.9)' : 'rgba(50, 255, 100, 0.9)';
-          ctx.fillRect(
-            boundingBox.x,
-            boundingBox.y - 25,
-            textWidth + 10,
-            25
-          );
-          
-          // Draw label text
-          ctx.fillStyle = '#ffffff';
-          ctx.fillText(
-            label,
-            boundingBox.x + 5,
-            boundingBox.y - 7
-          );
-          
-          // Add fluid trail for trackable detections
+          // Add fluid trail for trackable detections (motion tracking)
           if (TRACKABLE_TYPES.includes(classification.type)) {
             const normalizedX = boundingBox.centerX / canvas.width;
             const normalizedY = boundingBox.centerY / canvas.height;
