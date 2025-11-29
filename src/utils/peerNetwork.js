@@ -272,9 +272,14 @@ class PeerNetwork {
     const peerId = call.peer;
     console.log('Incoming call from:', peerId);
     
-    // Auto-answer with silence if we don't have a stream yet
-    // The actual audio will be added when user starts talking
-    call.answer(this.localAudioStream || undefined);
+    // Answer the call - if we have a local stream, share it; otherwise answer without stream
+    // PeerJS handles the case where answer() is called without a stream
+    if (this.localAudioStream) {
+      call.answer(this.localAudioStream);
+    } else {
+      // Answer without stream - we'll add our stream later when user starts talking
+      call.answer();
+    }
     
     call.on('stream', (remoteStream) => {
       console.log('Received remote audio stream from:', peerId);
@@ -301,12 +306,14 @@ class PeerNetwork {
    */
   async startAudioBroadcast() {
     try {
-      // Get audio stream from microphone
+      // Get audio stream from microphone with quality constraints
       this.localAudioStream = await navigator.mediaDevices.getUserMedia({
         audio: {
           echoCancellation: true,
           noiseSuppression: true,
-          autoGainControl: true
+          autoGainControl: true,
+          sampleRate: 48000,
+          channelCount: 1
         },
         video: false
       });

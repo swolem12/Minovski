@@ -24,7 +24,10 @@ function WalkieTalkie() {
         audioElements.set(peerId, audioEl);
       }
       audioEl.srcObject = stream;
-      audioEl.play().catch(e => console.warn('Audio play failed:', e));
+      audioEl.play().catch(e => {
+        console.warn(`Audio playback failed for peer ${peerId}:`, e.message);
+        // User interaction may be required to play audio on some browsers
+      });
     });
     
     const unsubAudioEnded = peerNetwork.on('audio-ended', ({ peerId }) => {
@@ -119,15 +122,14 @@ function WalkieTalkie() {
     stopTalking();
   };
   
-  // Cleanup on unmount
+  // Cleanup on unmount - always stop audio broadcast to prevent orphaned streams
   useEffect(() => {
     return () => {
-      if (isTalking) {
-        peerNetwork.stopAudioBroadcast();
-        peerNetwork.broadcastWalkieStatus(false);
-      }
+      // Always attempt cleanup on unmount regardless of isTalking state
+      peerNetwork.stopAudioBroadcast();
+      peerNetwork.broadcastWalkieStatus(false);
     };
-  }, [isTalking]);
+  }, []);
 
   return (
     <div className="walkie-talkie">
