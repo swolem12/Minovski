@@ -14,6 +14,8 @@ function NetworkPanel({ onRemoteDetection, onViewSwitch, onGridViewToggle }) {
   const [isHost, setIsHost] = useState(false);
   const [activeViewDevice, setActiveViewDevice] = useState(null);
   const [isGridView, setIsGridView] = useState(false);
+  const [joinError, setJoinError] = useState('');
+  const [isJoining, setIsJoining] = useState(false);
   const panelRef = useRef(null);
   const alertsRef = useRef(null);
   
@@ -100,6 +102,15 @@ function NetworkPanel({ onRemoteDetection, onViewSwitch, onGridViewToggle }) {
   const handleJoinRoom = async () => {
     if (!joinRoomId.trim()) return;
     
+    // Check if network is connected first
+    if (!isConnected) {
+      setJoinError('Network not ready. Please wait...');
+      return;
+    }
+    
+    setIsJoining(true);
+    setJoinError('');
+    
     try {
       await peerNetwork.joinRoom(joinRoomId.trim());
       setRoomId(joinRoomId.trim());
@@ -114,6 +125,7 @@ function NetworkPanel({ onRemoteDetection, onViewSwitch, onGridViewToggle }) {
       }
     } catch (err) {
       console.error('Failed to join room:', err);
+      setJoinError(err.message || 'Failed to connect. Check the Device ID and try again.');
       if (panelRef.current) {
         animate(panelRef.current, {
           backgroundColor: ['rgba(239, 68, 68, 0.2)', 'rgba(15, 15, 15, 0.95)'],
@@ -121,6 +133,8 @@ function NetworkPanel({ onRemoteDetection, onViewSwitch, onGridViewToggle }) {
           ease: 'outQuad'
         });
       }
+    } finally {
+      setIsJoining(false);
     }
   };
   
@@ -226,6 +240,7 @@ function NetworkPanel({ onRemoteDetection, onViewSwitch, onGridViewToggle }) {
                 <button 
                   className="btn-create-room"
                   onClick={handleCreateRoom}
+                  disabled={!isConnected}
                 >
                   Create Sensor Network
                 </button>
@@ -237,29 +252,43 @@ function NetworkPanel({ onRemoteDetection, onViewSwitch, onGridViewToggle }) {
                     type="text"
                     placeholder="Enter Device ID to connect"
                     value={joinRoomId}
-                    onChange={(e) => setJoinRoomId(e.target.value)}
+                    onChange={(e) => {
+                      setJoinRoomId(e.target.value);
+                      setJoinError(''); // Clear error when typing
+                    }}
+                    disabled={isJoining}
                   />
                   <button 
                     className="btn-join"
                     onClick={handleJoinRoom}
+                    disabled={!isConnected || isJoining || !joinRoomId.trim()}
                   >
-                    Join
+                    {isJoining ? 'Joining...' : 'Join'}
                   </button>
                 </div>
+                {joinError && (
+                  <p className="join-error">{joinError}</p>
+                )}
               </>
             ) : (
               <div className="room-active">
-                <label>Network ID:</label>
+                <label>Network ID (share to connect):</label>
                 <div className="room-id">
-                  <code>{roomId}</code>
+                  {/* Hosts display their Device ID (PeerJS peer ID) for others to connect to.
+                      Non-hosts display the roomId which is the host's device ID they connected to. */}
+                  <code>{isHost ? deviceId : roomId}</code>
                   <button 
                     className="copy-btn"
-                    onClick={() => copyToClipboard(roomId)}
+                    onClick={() => copyToClipboard(isHost ? deviceId : roomId)}
                   >
                     📋
                   </button>
                 </div>
-                <p className="share-hint">Share this ID with other devices to connect</p>
+                <p className="share-hint">
+                  {isHost 
+                    ? 'Share your Device ID with other devices to join your network' 
+                    : `Connected to: ${roomId}`}
+                </p>
               </div>
             )}
           </div>
