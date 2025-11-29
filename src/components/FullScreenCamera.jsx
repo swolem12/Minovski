@@ -3,7 +3,7 @@ import * as tf from '@tensorflow/tfjs';
 import * as cocoSsd from '@tensorflow-models/coco-ssd';
 import { animate } from 'animejs';
 import FluidSimulation from '../utils/fluidSimulation';
-import { classifyDetections as classifyCocoDetections, getOverallThreatLevel, getTypeColor, getThreatColor, isAerialThreat, formatConfidence, AERIAL_THREAT_TYPES, TRACKABLE_TYPES } from '../utils/objectClassifier';
+import { classifyDetections as classifyCocoDetections, getOverallThreatLevel, getTypeColor, getThreatColor, isAerialThreat, formatConfidence, estimateHandPositions, AERIAL_THREAT_TYPES, TRACKABLE_TYPES } from '../utils/objectClassifier';
 import { yolov8Detector } from '../utils/yolov8Detector';
 import audioAlert from '../utils/audioAlert';
 import './FullScreenCamera.css';
@@ -253,7 +253,16 @@ function FullScreenCamera({ onClose, onDetections, onThreatLevel }) {
           if (TRACKABLE_TYPES.includes(classification.type)) {
             const normalizedX = boundingBox.centerX / canvas.width;
             const normalizedY = boundingBox.centerY / canvas.height;
-            fluidSimRef.current?.addTrailPoint(normalizedX, normalizedY, classification.type);
+            // Create unique object ID for trajectory tracking
+            const objectId = `${classification.type}_${Math.round(boundingBox.x)}_${Math.round(boundingBox.y)}`;
+            fluidSimRef.current?.addTrailPoint(normalizedX, normalizedY, classification.type, objectId);
+            
+            // For person detections, also track estimated hand positions for movement tracking
+            if (classification.type === 'person') {
+              const handPositions = estimateHandPositions(boundingBox, canvas.width, canvas.height);
+              fluidSimRef.current?.addTrailPoint(handPositions.leftHand.x, handPositions.leftHand.y, 'hand', `${objectId}_left_hand`);
+              fluidSimRef.current?.addTrailPoint(handPositions.rightHand.x, handPositions.rightHand.y, 'hand', `${objectId}_right_hand`);
+            }
           }
         }
         
@@ -350,7 +359,7 @@ function FullScreenCamera({ onClose, onDetections, onThreatLevel }) {
             </div>
           </div>
           <button className="fs-btn-close" onClick={handleClose}>
-            <span>✕</span>
+            <span>×</span>
             <span>EXIT</span>
           </button>
         </div>
@@ -370,7 +379,7 @@ function FullScreenCamera({ onClose, onDetections, onThreatLevel }) {
         
         {error && (
           <div className="fs-error">
-            <div className="fs-error-icon">⚠</div>
+            <div className="fs-error-icon">!</div>
             <p>{error}</p>
             <button onClick={() => setError(null)}>DISMISS</button>
           </div>
@@ -442,7 +451,7 @@ function FullScreenCamera({ onClose, onDetections, onThreatLevel }) {
           
           {activeThreats.length > 0 && (
             <div className="fs-panel fs-panel-alert">
-              <h3 className="fs-panel-title">⚠ THREAT ALERT</h3>
+              <h3 className="fs-panel-title">! THREAT ALERT</h3>
               <ul className="fs-threat-list">
                 {activeThreats.map((threat, index) => (
                   <li key={index} className="fs-threat-item">
