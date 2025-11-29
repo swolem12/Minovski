@@ -126,7 +126,8 @@ class PeerNetwork {
   handleConnection(conn) {
     const peerId = conn.peer;
     
-    conn.on('open', () => {
+    // Setup function to be called when connection is ready
+    const setupConnection = () => {
       this.connections.set(peerId, conn);
       console.log('Connection established with:', peerId);
       this.emit('peer-connected', { peerId, connection: conn });
@@ -139,7 +140,14 @@ class PeerNetwork {
           timestamp: Date.now()
         }
       });
-    });
+    };
+    
+    // If connection is already open, set up immediately; otherwise wait for 'open' event
+    if (conn.open) {
+      setupConnection();
+    } else {
+      conn.on('open', setupConnection);
+    }
     
     conn.on('data', (data) => {
       this.handleData(peerId, data);
