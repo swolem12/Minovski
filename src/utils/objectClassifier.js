@@ -28,9 +28,30 @@ const THREAT_MAPPINGS = {
 // Minimum confidence threshold for detection
 const MIN_CONFIDENCE = 0.5;
 
+// Aerial threat types for consistent filtering across the app
+export const AERIAL_THREAT_TYPES = ['drone', 'quadcopter', 'fixed-wing', 'helicopter'];
+
 // Simulated drone detection keywords for demo purposes
 // In production, you'd use a custom-trained model
 const DEMO_KEYWORDS = ['drone', 'quadcopter', 'helicopter', 'aircraft', 'uav', 'suas'];
+
+/**
+ * Check if a detection is an aerial threat
+ * @param {Object} detection - Detection object with classification
+ * @returns {boolean}
+ */
+export function isAerialThreat(detection) {
+  return AERIAL_THREAT_TYPES.includes(detection?.classification?.type);
+}
+
+/**
+ * Format confidence as percentage string
+ * @param {number} confidence - Confidence value between 0 and 1
+ * @returns {string} Formatted percentage like "85%"
+ */
+export function formatConfidence(confidence) {
+  return `${Math.round(confidence * 100)}%`;
+}
 
 /**
  * Classify detected objects and determine threat level
@@ -147,6 +168,9 @@ export default {
   getOverallThreatLevel,
   getThreatColor,
   getTypeColor,
+  isAerialThreat,
+  formatConfidence,
   THREAT_MAPPINGS,
+  AERIAL_THREAT_TYPES,
   MIN_CONFIDENCE
 };

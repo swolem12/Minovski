@@ -1,6 +1,6 @@
 import { useEffect, useRef } from 'react';
 import { animate } from 'animejs';
-import { getThreatColor } from '../utils/objectClassifier';
+import { getThreatColor, isAerialThreat } from '../utils/objectClassifier';
 import './ThreatDisplay.css';
 
 function ThreatDisplay({ threatLevel, detections = [] }) {
@@ -69,9 +69,7 @@ function ThreatDisplay({ threatLevel, detections = [] }) {
   };
   
   const threatColor = getThreatColor(threatLevel);
-  const activeDetections = detections.filter(d => 
-    ['drone', 'quadcopter', 'fixed-wing', 'helicopter'].includes(d.classification?.type)
-  );
+  const activeDetections = detections.filter(isAerialThreat);
 
   return (
     <div 
