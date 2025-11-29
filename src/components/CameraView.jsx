@@ -16,7 +16,7 @@ const PREFERRED_MODEL = 'yolov8';
 const THREAT_COLOR = 'rgba(255, 50, 50, 1)'; // Red for threats
 const SAFE_COLOR = 'rgba(50, 255, 100, 1)'; // Green for non-threats
 
-function CameraView({ onDetections, onThreatLevel, isActive = true }) {
+function CameraView({ onDetections, onThreatLevel, onCameraStream, isActive = true }) {
   const videoRef = useRef(null);
   const canvasRef = useRef(null);
   const fluidCanvasRef = useRef(null);
@@ -226,6 +226,9 @@ function CameraView({ onDetections, onThreatLevel, isActive = true }) {
         await videoRef.current.play();
         setCameraActive(true);
         
+        // Notify parent of camera stream availability
+        onCameraStream?.(stream);
+        
         // Animate camera activation
         if (containerRef.current) {
           animate(containerRef.current, {
@@ -247,7 +250,7 @@ function CameraView({ onDetections, onThreatLevel, isActive = true }) {
         setError('Unable to access camera. Please try again.');
       }
     }
-  }, []);
+  }, [onCameraStream]);
   
   // Handle zoom change
   const handleZoomChange = useCallback(async (newZoom) => {
@@ -289,6 +292,9 @@ function CameraView({ onDetections, onThreatLevel, isActive = true }) {
       setCameraActive(false);
     }
     
+    // Notify parent that camera stream is no longer available
+    onCameraStream?.(null);
+    
     streamRef.current = null;
     trackRef.current = null;
     setTorchEnabled(false);
@@ -297,7 +303,7 @@ function CameraView({ onDetections, onThreatLevel, isActive = true }) {
     if (animationRef.current) {
       cancelAnimationFrame(animationRef.current);
     }
-  }, []);
+  }, [onCameraStream]);
   
   // Detection loop
   useEffect(() => {

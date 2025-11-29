@@ -21,9 +21,11 @@ function TrackingPage({ onBackToHome }) {
   const [isGridView, setIsGridView] = useState(false);
   const [remoteVideoStream, setRemoteVideoStream] = useState(null);
   const [isLoadingRemoteVideo, setIsLoadingRemoteVideo] = useState(false);
+  const [remoteVideoError, setRemoteVideoError] = useState(null);
   const containerRef = useRef(null);
   const headerRef = useRef(null);
   const remoteVideoRef = useRef(null);
+  const localCameraStreamRef = useRef(null);
   
   // Animate page load
   useEffect(() => {
@@ -63,6 +65,11 @@ function TrackingPage({ onBackToHome }) {
       });
     }
   };
+  
+  // Handle local camera stream availability
+  const handleCameraStream = useCallback((stream) => {
+    localCameraStreamRef.current = stream;
+  }, []);
   
   // Handle threat level changes
   const handleThreatLevel = (level) => {
@@ -122,6 +129,7 @@ function TrackingPage({ onBackToHome }) {
     const unsubRemoteVideo = peerNetwork.on('remote-video', ({ peerId, stream }) => {
       console.log('Received remote video from:', peerId);
       if (peerId === activeViewDevice) {
+        setRemoteVideoError(null); // Clear any previous errors
         setRemoteVideoStream(stream);
         setIsLoadingRemoteVideo(false);
       }
@@ -138,6 +146,7 @@ function TrackingPage({ onBackToHome }) {
       console.error('Video error from', peerId, error);
       if (peerId === activeViewDevice) {
         setIsLoadingRemoteVideo(false);
+        setRemoteVideoError('Failed to connect to remote camera');
       }
     });
     
@@ -146,11 +155,9 @@ function TrackingPage({ onBackToHome }) {
       console.log('Video requested by:', peerId);
       // Start streaming our video to the requester
       try {
-        // Get the video element from CameraView if it exists
-        const videoElement = document.querySelector('.camera-feed');
-        if (videoElement && videoElement.srcObject) {
-          // Use existing camera stream
-          await peerNetwork.startVideoStream(videoElement.srcObject);
+        // Use the stored camera stream ref if available
+        if (localCameraStreamRef.current) {
+          await peerNetwork.startVideoStream(localCameraStreamRef.current);
         } else {
           // Start new video stream
           await peerNetwork.startVideoStream();
@@ -174,6 +181,7 @@ function TrackingPage({ onBackToHome }) {
       remoteVideoRef.current.srcObject = remoteVideoStream;
       remoteVideoRef.current.play().catch(err => {
         console.error('Failed to play remote video:', err);
+        setRemoteVideoError('Unable to play remote video. Please try again.');
       });
     }
   }, [remoteVideoStream]);
@@ -290,7 +298,18 @@ function TrackingPage({ onBackToHome }) {
                   <p>Connecting to remote camera...</p>
                 </div>
               )}
-              {remoteVideoStream ? (
+              {remoteVideoError && (
+                <div className="remote-video-error">
+                  <div className="error-icon">⚠</div>
+                  <p>{remoteVideoError}</p>
+                  <button onClick={() => {
+                    setRemoteVideoError(null);
+                    setIsLoadingRemoteVideo(true);
+                    peerNetwork.requestVideoFromPeer(activeViewDevice);
+                  }}>Retry Connection</button>
+                </div>
+              )}
+              {remoteVideoStream && !remoteVideoError ? (
                 <video
                   ref={remoteVideoRef}
                   className="remote-video-feed"
@@ -298,7 +317,7 @@ function TrackingPage({ onBackToHome }) {
                   playsInline
                   muted
                 />
-              ) : !isLoadingRemoteVideo && (
+              ) : !isLoadingRemoteVideo && !remoteVideoError && (
                 <div className="remote-video-waiting">
                   <div className="waiting-icon">📡</div>
                   <p>Waiting for remote feed...</p>
@@ -310,6 +329,7 @@ function TrackingPage({ onBackToHome }) {
             <CameraView 
               onDetections={handleDetections}
               onThreatLevel={handleThreatLevel}
+              onCameraStream={handleCameraStream}
               isActive={isActive}
             />
           )}

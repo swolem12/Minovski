@@ -239,7 +239,8 @@
 }
 
 .remote-video-loading,
-.remote-video-waiting {
+.remote-video-waiting,
+.remote-video-error {
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -263,10 +264,38 @@
 }
 
 .remote-video-loading p,
-.remote-video-waiting p {
+.remote-video-waiting p,
+.remote-video-error p {
   color: #8b8f9a;
   font-size: 14px;
   margin: 0;
+}
+
+.remote-video-error {
+  color: #ef4444;
+}
+
+.remote-video-error .error-icon {
+  font-size: 48px;
+  color: #ef4444;
+}
+
+.remote-video-error button {
+  padding: 10px 20px;
+  background: rgba(0, 212, 255, 0.2);
+  border: 1px solid #00d4ff;
+  border-radius: 4px;
+  color: #00d4ff;
+  font-size: 12px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.remote-video-error button:hover {
+  background: rgba(0, 212, 255, 0.3);
 }
 
 .remote-video-waiting .waiting-icon {

@@ -614,8 +614,19 @@ If problems persist, try:
       return this.localVideoStream;
     } catch (err) {
       console.error('Failed to get video stream:', err);
-      this.emit('video-error', { error: err });
-      throw err;
+      // Provide specific error messages for common cases
+      let errorMessage = 'Failed to access camera';
+      if (err.name === 'NotAllowedError' || err.name === 'PermissionDeniedError') {
+        errorMessage = 'Camera permission denied. Please allow camera access.';
+      } else if (err.name === 'NotFoundError' || err.name === 'DevicesNotFoundError') {
+        errorMessage = 'No camera found on this device.';
+      } else if (err.name === 'NotReadableError' || err.name === 'TrackStartError') {
+        errorMessage = 'Camera is in use by another application.';
+      } else if (err.name === 'OverconstrainedError') {
+        errorMessage = 'Camera does not support the requested settings.';
+      }
+      this.emit('video-error', { error: err, message: errorMessage });
+      throw new Error(errorMessage);
     }
   }
   
@@ -672,7 +683,14 @@ If problems persist, try:
    */
   stopVideoStream() {
     if (this.localVideoStream) {
-      this.localVideoStream.getTracks().forEach(track => track.stop());
+      const tracks = this.localVideoStream.getTracks();
+      if (tracks && tracks.length > 0) {
+        tracks.forEach(track => {
+          if (track && typeof track.stop === 'function') {
+            track.stop();
+          }
+        });
+      }
       this.localVideoStream = null;
     }
     
@@ -680,7 +698,9 @@ If problems persist, try:
     
     // Close all video connections
     for (const call of this.videoConnections.values()) {
-      call.close();
+      if (call && typeof call.close === 'function') {
+        call.close();
+      }
     }
     this.videoConnections.clear();
     
