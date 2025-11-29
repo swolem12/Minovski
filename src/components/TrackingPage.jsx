@@ -6,7 +6,7 @@ import NetworkPanel from './NetworkPanel';
 import FullScreenCamera from './FullScreenCamera';
 import peerNetwork from '../utils/peerNetwork';
 import audioAlert from '../utils/audioAlert';
-import { getOverallThreatLevel } from '../utils/objectClassifier';
+import { getOverallThreatLevel, isAerialThreat, AERIAL_THREAT_TYPES } from '../utils/objectClassifier';
 import './TrackingPage.css';
 
 function TrackingPage({ onBackToHome }) {
@@ -43,9 +43,7 @@ function TrackingPage({ onBackToHome }) {
     setDetections(newDetections);
     
     // Broadcast to network if threat detected
-    const threats = newDetections.filter(d => 
-      ['drone', 'quadcopter', 'fixed-wing', 'helicopter'].includes(d.classification?.type)
-    );
+    const threats = newDetections.filter(isAerialThreat);
     
     if (threats.length > 0) {
       peerNetwork.broadcastDetection({
@@ -95,9 +93,8 @@ function TrackingPage({ onBackToHome }) {
   };
   
   // Combined threat count
-  const totalThreats = detections.filter(d => 
-    ['drone', 'quadcopter', 'fixed-wing', 'helicopter'].includes(d.classification?.type)
-  ).length + remoteDetections.reduce((acc, rd) => acc + (rd.detection.threats?.length || 0), 0);
+  const totalThreats = detections.filter(isAerialThreat).length + 
+    remoteDetections.reduce((acc, rd) => acc + (rd.detection.threats?.length || 0), 0);
   
   const handleBackClick = () => {
     // Exit animation with null check

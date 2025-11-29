@@ -3,7 +3,7 @@ import * as tf from '@tensorflow/tfjs';
 import * as cocoSsd from '@tensorflow-models/coco-ssd';
 import { animate } from 'animejs';
 import FluidSimulation from '../utils/fluidSimulation';
-import { classifyDetections as classifyCocoDetections, getOverallThreatLevel, getTypeColor, getThreatColor } from '../utils/objectClassifier';
+import { classifyDetections as classifyCocoDetections, getOverallThreatLevel, getTypeColor, getThreatColor, isAerialThreat, formatConfidence, AERIAL_THREAT_TYPES } from '../utils/objectClassifier';
 import { yolov8Detector } from '../utils/yolov8Detector';
 import audioAlert from '../utils/audioAlert';
 import './FullScreenCamera.css';
@@ -132,7 +132,8 @@ function FullScreenCamera({ onClose, onDetections, onThreatLevel }) {
         startCamera();
       });
     }
-  }, [isLoading, model, cameraActive, error, startCamera]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isLoading, model, cameraActive, error]);
   
   // Stop camera
   const stopCamera = useCallback(() => {
@@ -230,7 +231,7 @@ function FullScreenCamera({ onClose, onDetections, onThreatLevel }) {
           ctx.stroke();
           
           // Draw label
-          const label = `${classification.label.toUpperCase()} ${Math.round(confidence * 100)}%`;
+          const label = `${classification.label.toUpperCase()} ${formatConfidence(confidence)}`;
           ctx.font = 'bold 12px Inter, sans-serif';
           const textWidth = ctx.measureText(label).width;
           
@@ -249,7 +250,7 @@ function FullScreenCamera({ onClose, onDetections, onThreatLevel }) {
             boundingBox.y - 7
           );
           
-          if (['drone', 'quadcopter', 'fixed-wing', 'helicopter'].includes(classification.type)) {
+          if (AERIAL_THREAT_TYPES.includes(classification.type)) {
             const normalizedX = boundingBox.centerX / canvas.width;
             const normalizedY = boundingBox.centerY / canvas.height;
             fluidSimRef.current?.addTrailPoint(normalizedX, normalizedY, classification.type);
@@ -313,9 +314,7 @@ function FullScreenCamera({ onClose, onDetections, onThreatLevel }) {
     return labels[level] || 'UNKNOWN';
   };
   
-  const activeThreats = detections.filter(d => 
-    ['drone', 'quadcopter', 'fixed-wing', 'helicopter'].includes(d.classification?.type)
-  );
+  const activeThreats = detections.filter(isAerialThreat);
 
   return (
     <div className="fullscreen-camera" ref={containerRef}>
@@ -433,7 +432,7 @@ function FullScreenCamera({ onClose, onDetections, onThreatLevel }) {
                     ></span>
                     <span className="fs-detection-label">{detection.classification.label}</span>
                     <span className="fs-detection-confidence">
-                      {Math.round(detection.confidence * 100)}%
+                      {formatConfidence(detection.confidence)}
                     </span>
                   </li>
                 ))}
