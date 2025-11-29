@@ -13,6 +13,10 @@ const TRACKED_OBJECT_TIMEOUT_MS = 2000;
 // Trail segment count for smooth liquid effect
 const TRAIL_SEGMENTS = 20;
 
+// Trail colors - threat-based coloring
+const THREAT_TRAIL_COLOR = [1.0, 0.2, 0.2]; // Red for threats
+const SAFE_TRAIL_COLOR = [0.0, 1.0, 0.4]; // Green for non-threats
+
 class FluidSimulation {
   constructor(canvas) {
     this.canvas = canvas;
@@ -195,12 +199,10 @@ class FluidSimulation {
       const positions = objectData.positions;
       if (positions.length < 2) continue;
       
-      // Determine color based on threat status
-      // Green for non-threats: rgba(0, 255, 100, alpha)
-      // Red for threats: rgba(255, 50, 50, alpha)
+      // Determine color based on threat status using constants
       const baseColor = objectData.isThreat 
-        ? [1.0, 0.2, 0.2] // Red
-        : [0.0, 1.0, 0.4]; // Green
+        ? THREAT_TRAIL_COLOR
+        : SAFE_TRAIL_COLOR;
       
       // Create trail segments along the position history
       for (let i = 0; i < positions.length; i++) {
