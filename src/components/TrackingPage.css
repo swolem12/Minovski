@@ -1,8 +1,10 @@
 .tracking-page {
   min-height: 100vh;
+  min-height: 100dvh; /* Dynamic viewport height for mobile */
   display: flex;
   flex-direction: column;
   background: var(--bg-primary);
+  overflow-x: hidden;
 }
 
 /* Tracking Header */
@@ -79,6 +81,20 @@
   gap: 20px;
   padding: 20px;
   flex: 1;
+  min-height: 0; /* Allow flex item to shrink */
+}
+
+.camera-section {
+  min-width: 0;
+  min-height: 0;
+}
+
+.sidebar {
+  display: flex;
+  flex-direction: column;
+  gap: 15px;
+  min-height: 0;
+  overflow-y: auto;
 }
 
 /* Tracking Footer */
@@ -98,10 +114,16 @@
 @media (max-width: 900px) {
   .tracking-main {
     grid-template-columns: 1fr;
+    gap: 15px;
   }
   
-  .sidebar {
-    order: -1;
+  /* Keep camera section first on mobile, sidebar below */
+  .tracking-main .camera-section {
+    order: 0 !important;
+  }
+  
+  .tracking-main .sidebar {
+    order: 1 !important;
   }
   
   .tracking-header {
@@ -118,6 +140,7 @@
 @media (max-width: 480px) {
   .tracking-main {
     padding: 10px;
+    gap: 10px;
   }
   
   .tracking-header {
@@ -132,5 +155,13 @@
   .btn-back {
     padding: 6px 12px;
     font-size: 13px;
+  }
+  
+  .tracking-footer {
+    padding: 10px 15px;
+  }
+  
+  .tracking-footer p {
+    font-size: 11px;
   }
 }

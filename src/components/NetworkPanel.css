@@ -328,3 +328,49 @@
   color: #6b7280;
   font-size: 10px;
 }
+
+/* Mobile responsive styles */
+@media (max-width: 480px) {
+  .network-panel {
+    border-radius: 10px;
+  }
+  
+  .network-header {
+    padding: 12px;
+  }
+  
+  .status-text {
+    font-size: 13px;
+  }
+  
+  .peer-count .count {
+    font-size: 18px;
+  }
+  
+  .network-content {
+    padding: 12px;
+  }
+  
+  .btn-create-room {
+    padding: 10px;
+    font-size: 13px;
+  }
+  
+  .join-room input {
+    padding: 8px 10px;
+    font-size: 13px;
+  }
+  
+  .btn-join {
+    padding: 8px 15px;
+    font-size: 13px;
+  }
+  
+  .peer-item {
+    padding: 8px;
+  }
+  
+  .peer-id {
+    font-size: 11px;
+  }
+}

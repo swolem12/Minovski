@@ -323,3 +323,99 @@
   background: #2563eb;
   transform: translateY(-2px);
 }
+
+/* Mobile responsive styles */
+@media (max-width: 480px) {
+  .camera-view {
+    border-radius: 10px;
+  }
+  
+  .video-container {
+    aspect-ratio: 4 / 3; /* Better aspect ratio for mobile */
+  }
+  
+  .camera-controls {
+    flex-direction: column;
+    gap: 10px;
+    padding: 12px;
+  }
+  
+  .tracking-status {
+    font-size: 12px;
+  }
+  
+  .tracking-indicator {
+    width: 8px;
+    height: 8px;
+  }
+  
+  .model-badge {
+    font-size: 9px;
+    padding: 2px 6px;
+  }
+  
+  .btn-stop-camera {
+    width: 100%;
+    justify-content: center;
+    padding: 10px 15px;
+    font-size: 13px;
+  }
+  
+  .permission-overlay {
+    padding: 20px;
+  }
+  
+  .permission-icon {
+    font-size: 48px;
+    margin-bottom: 15px;
+  }
+  
+  .permission-content h2 {
+    font-size: 20px;
+    margin-bottom: 10px;
+  }
+  
+  .permission-content p {
+    font-size: 13px;
+    margin-bottom: 20px;
+  }
+  
+  .btn-start-tracking {
+    padding: 15px 25px;
+  }
+  
+  .btn-icon {
+    font-size: 24px;
+  }
+  
+  .btn-text {
+    font-size: 16px;
+  }
+  
+  .btn-subtitle {
+    font-size: 10px;
+  }
+  
+  .loading-overlay p {
+    font-size: 13px;
+  }
+  
+  .loader {
+    width: 50px;
+    height: 50px;
+  }
+  
+  .error-icon {
+    font-size: 40px;
+  }
+  
+  .error-overlay p {
+    font-size: 13px;
+    max-width: 260px;
+  }
+  
+  .error-overlay button {
+    padding: 10px 20px;
+    font-size: 13px;
+  }
+}

@@ -1,10 +1,11 @@
 .landing-page {
   min-height: 100vh;
+  min-height: 100dvh; /* Dynamic viewport height for mobile */
   display: flex;
   flex-direction: column;
   background: linear-gradient(180deg, #0a0a0a 0%, #1a1a2e 50%, #0a0a0a 100%);
   position: relative;
-  overflow: hidden;
+  overflow-x: hidden;
 }
 
 /* Particles Background */
