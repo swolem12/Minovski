@@ -50,7 +50,9 @@ class PeerNetwork {
               { urls: 'stun:stun2.l.google.com:19302' },
               { urls: 'stun:stun3.l.google.com:19302' },
               { urls: 'stun:stun4.l.google.com:19302' },
-              // Free TURN servers from OpenRelay for NAT traversal across different networks
+              // Free public TURN servers from OpenRelay for NAT traversal across different networks
+              // These are intentionally public credentials provided by OpenRelay (metered.ca) for open-source projects
+              // TURN credentials must be client-accessible for WebRTC - the service has rate limiting
               {
                 urls: 'turn:openrelay.metered.ca:80',
                 username: 'openrelayproject',
