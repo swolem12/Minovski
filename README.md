@@ -1,56 +1,155 @@
 # MINOVSKI
 
-**Optical Vision Drone Detection System with Minovsky Particle Tracking**
+<div align="center">
 
-A React-based web application that uses your device's camera to detect and track drones, quadcopters, fixed-wing sUAS, and other aerial vehicles in real-time. Features **YOLOv8 via ONNX Runtime Web** for detection, Gundam-inspired Minovsky particle trail effects, and multi-device sensor network capabilities.
+![Minovski Logo](https://img.shields.io/badge/MINOVSKI-Optical%20Threat%20Detection-00d4ff?style=for-the-badge&logo=radar&logoColor=white)
 
-## 🚀 Features
+**Real-Time Aerial Threat Detection & Multi-Device Sensor Network**
 
-- **YOLOv8 Object Detection**: Uses ONNX Runtime Web to run YOLOv8 models directly in the browser
-- **Fallback Support**: Automatic fallback to TensorFlow.js COCO-SSD if YOLOv8 model unavailable
-- **Minovsky Particle Trails**: WebGL-powered particle effects inspired by Mobile Suit Gundam
-- **Audio/Haptic Alerts**: Buzzer notifications and device vibration for threat detection
-- **Multi-Device Network**: Connect multiple devices via WebRTC to create a distributed sensor network
-- **Mobile-First Design**: Optimized for smartphone cameras with responsive UI
-- **Anime.js Animations**: Smooth, professional UI animations throughout the app
+[![React](https://img.shields.io/badge/React-19-61DAFB?style=flat-square&logo=react)](https://react.dev/)
+[![YOLOv8](https://img.shields.io/badge/YOLOv8-ONNX-purple?style=flat-square)](https://docs.ultralytics.com/)
+[![OpenCV](https://img.shields.io/badge/OpenCV.js-Contours-green?style=flat-square&logo=opencv)](https://docs.opencv.org/4.x/d5/d10/tutorial_js_root.html)
+[![WebRTC](https://img.shields.io/badge/WebRTC-P2P-orange?style=flat-square)](https://webrtc.org/)
 
-## 🎯 Detected Object Types
+</div>
 
-- Drones / Quadcopters (via bird/kite proxy detection)
-- Fixed-wing aircraft (airplane class)
-- Helicopters
-- Ground vehicles (cars, trucks, buses)
-- Personnel
+---
 
-## 📱 Usage
+## 🎯 What is MINOVSKI?
 
-1. Open the app on your mobile device
-2. Grant camera permissions when prompted
-3. Click "Start Tracking" to begin detection
-4. Point your camera at the sky to detect aerial objects
-5. The app will automatically alert you when threats are detected
+**MINOVSKI** is a browser-based optical detection system designed to identify, track, and monitor aerial threats (drones, aircraft, UAVs) using your device's camera. Inspired by the Minovsky particle tracking systems from Mobile Suit Gundam, this application provides:
 
-### Multi-Device Network
+- **Real-time object detection** using YOLOv8 AI running directly in your browser
+- **Contour-based outline tracking** (not bounding boxes) for clean, non-intrusive visuals
+- **Multi-device sensor networks** for collaborative threat monitoring
+- **Motion trail visualization** showing object movement patterns
+- **Cross-network connectivity** for remote camera viewing between devices
 
-1. On the first device, click "Create Sensor Network"
-2. Share the Device ID with other devices
-3. On other devices, enter the Device ID and click "Join"
-4. All connected devices will share detection data
+### The Problem It Solves
+
+Traditional drone detection systems are expensive, require specialized hardware, and can't easily be deployed across multiple locations. MINOVSKI turns any smartphone or laptop with a camera into a threat detection node that can:
+
+1. **Detect aerial objects** in real-time using AI
+2. **Track movement patterns** with fluid particle trails
+3. **Network with other devices** to share detection data
+4. **View remote cameras** from connected devices
+5. **Alert users** with audio and visual notifications
+
+---
+
+## ✨ Key Features
+
+### 🔍 OpenCV Contour Tracking (NEW)
+Instead of cluttered bounding boxes, MINOVSKI uses **OpenCV.js contour detection** to draw precise outlines around detected objects. This provides:
+- Clean, shape-following outlines
+- Minimal UI with small pill-shaped labels
+- Better visual clarity for tracking moving objects
+
+### 🌐 Multi-Device Sensor Network
+Connect multiple devices via WebRTC to create a distributed detection network:
+- **Create a network** on one device (host)
+- **Join from other devices** using the host's Device ID
+- **Share detection data** in real-time across all connected devices
+- **View remote cameras** - switch to see what other devices are seeing
+- **Walkie-talkie** communication between devices
+- **Chat messaging** for coordination
+
+### 🔄 Reliable Cross-Network Connections
+- **TURN server redundancy** with multiple providers
+- **Automatic retry** with exponential backoff (3 attempts)
+- **45-second timeout** for slower relay connections
+- **Real-time connection progress** feedback
+- **Detailed troubleshooting** when connection fails
+
+### 🎨 Minovsky Particle Trails
+WebGL-powered fluid simulation creates glowing particle trails that follow detected objects, showing:
+- Movement direction and speed
+- Threat vs non-threat color coding (red/green)
+- Object trajectory over time
+
+### 📱 Mobile-First Design
+- Optimized for smartphone cameras
+- Responsive UI works on any screen size
+- Touch-friendly controls
+- Night vision mode (torch toggle) when available
+- Digital zoom support
+
+---
+
+## 🚀 Quick Start
+
+### Online Demo
+Visit the live demo: **https://swolem12.github.io/Minovski/**
+
+### Local Development
+
+```bash
+# Clone the repository
+git clone https://github.com/swolem12/Minovski.git
+cd Minovski
+
+# Install dependencies
+npm install
+
+# Start development server
+npm run dev
+
+# Build for production
+npm run build
+```
+
+### Basic Usage
+
+1. **Open the app** on your device
+2. **Grant camera permissions** when prompted
+3. **Click "Start Tracking"** to begin detection
+4. **Point your camera at the sky** to detect aerial objects
+5. **View detected threats** with outline tracking and motion trails
+
+### Multi-Device Network Setup
+
+1. **Device A (Host)**: Click "Create Sensor Network"
+2. **Copy the Device ID** displayed
+3. **Device B**: Enter the Device ID and click "Join"
+4. **All devices** now share detection data in real-time
+5. **Host can view** remote cameras by clicking "View" on connected devices
+
+---
+
+## 🎯 Detection Capabilities
+
+| Object Type | Detection Source | Threat Level |
+|-------------|------------------|--------------|
+| Drones / Quadcopters | Bird/Kite proxy | Medium-High |
+| Fixed-wing Aircraft | Airplane class | High |
+| Helicopters | Airplane class | High |
+| Ground Vehicles | Car/Truck/Bus | Low |
+| Personnel | Person class | Info |
+| Airborne Objects | Ball/Frisbee | Low |
+
+> **Note**: For optimal drone detection, train a custom YOLOv8 model on drone datasets. See [Training Resources](#-drone-detection-training-resources) below.
+
+---
 
 ## 🛠️ Technology Stack
 
-- **React 19** - UI Framework
-- **Vite** - Build tool
-- **ONNX Runtime Web** - YOLOv8 inference in browser
-- **TensorFlow.js + COCO-SSD** - Fallback detection model
-- **WebGL** - Minovsky particle effects
-- **Anime.js v4** - UI animations
-- **PeerJS** - WebRTC for multi-device communication
-- **Web Audio API** - Alert sounds
+| Component | Technology | Purpose |
+|-----------|------------|---------|
+| UI Framework | React 19 | Component-based interface |
+| Build Tool | Vite 7 | Fast development & bundling |
+| AI Detection | YOLOv8 via ONNX Runtime | Real-time object detection |
+| Fallback AI | TensorFlow.js + COCO-SSD | Backup detection model |
+| Contour Detection | OpenCV.js | Shape outline extraction |
+| Particle Effects | WebGL | Minovsky fluid trails |
+| Animations | Anime.js v4 | Smooth UI transitions |
+| Networking | PeerJS (WebRTC) | P2P multi-device communication |
+| Audio | Web Audio API | Threat alert sounds |
+
+---
 
 ## 🔧 YOLOv8 Model Setup
 
-To use YOLOv8 detection, you need to provide an ONNX model:
+To use YOLOv8 detection, provide an ONNX model:
 
 ```bash
 # Install ultralytics
@@ -65,43 +164,7 @@ cp yolov8n.onnx public/models/
 
 See `public/models/README.md` for more details.
 
-## 🚀 Deployment
-
-The app is automatically deployed to GitHub Pages on push to main/master branch.
-
-**Live Demo**: `https://[username].github.io/Minovski/`
-
-## 💻 Local Development
-
-```bash
-# Install dependencies
-npm install
-
-# Start development server
-npm run dev
-
-# Build for production
-npm run build
-
-# Preview production build
-npm run preview
-```
-
-## 📋 Requirements
-
-- Modern web browser with WebGL and WebAssembly support
-- Camera access (rear camera preferred)
-- HTTPS connection (required for camera access)
-
-## 🔒 Privacy
-
-- All processing happens locally on your device
-- No video or images are sent to external servers
-- Network features use peer-to-peer connections
-
-## ⚠️ Disclaimer
-
-This is a prototype/demonstration application. For optimal drone detection, train a custom YOLOv8 model on drone datasets.
+---
 
 ## 🎓 Drone Detection Training Resources
 
@@ -168,6 +231,75 @@ cp best.onnx /path/to/Minovski/public/models/yolov8n.onnx
 | **Military Drone Detection** | Shahed-136, Lancet, Orlan-10 with 94.8% mAP50 | [GitHub](https://github.com/takzen/yolo-military-drone-detection) |
 | **VisDrone Dataset** | Large-scale drone detection benchmark | [GitHub](https://github.com/VisDrone/VisDrone-Dataset) |
 
+---
+
+## 📋 System Requirements
+
+- **Browser**: Chrome 90+, Firefox 88+, Safari 14+, Edge 90+
+- **Features Required**: WebGL, WebAssembly, WebRTC
+- **Camera**: Any device camera (rear camera preferred for outdoor use)
+- **Connection**: HTTPS required for camera access
+- **Network**: Internet required for multi-device features (TURN relay)
+
+---
+
+## 🔒 Privacy & Security
+
+| Aspect | Implementation |
+|--------|---------------|
+| **Processing** | All AI inference runs locally in your browser |
+| **Video Data** | Never sent to external servers |
+| **Network Traffic** | P2P connections with end-to-end encryption |
+| **Storage** | Only Device ID stored in localStorage |
+| **TURN Servers** | Public relay servers used only for NAT traversal |
+
+---
+
+## 🗺️ Roadmap
+
+- [ ] Custom YOLOv8 model trained on drone datasets
+- [ ] Instance segmentation for pixel-perfect outlines
+- [ ] Object tracking with ID persistence across frames
+- [ ] GPS integration for threat mapping
+- [ ] Recording & playback of detection sessions
+- [ ] Push notifications for background detection
+- [ ] Desktop Electron app
+
+---
+
+## 🤝 Contributing
+
+Contributions are welcome! Please feel free to submit a Pull Request.
+
+1. Fork the repository
+2. Create your feature branch (`git checkout -b feature/AmazingFeature`)
+3. Commit your changes (`git commit -m 'Add some AmazingFeature'`)
+4. Push to the branch (`git push origin feature/AmazingFeature`)
+5. Open a Pull Request
+
+---
+
+## ⚠️ Disclaimer
+
+This is a **prototype/demonstration application** for educational purposes. It is NOT intended for:
+- Military or defense applications
+- Law enforcement surveillance
+- Any illegal monitoring activities
+
+For production drone detection systems, please use certified commercial solutions.
+
+---
+
 ## 📜 License
 
-MIT License
+MIT License - See [LICENSE](LICENSE) for details.
+
+---
+
+<div align="center">
+
+**Built with ❤️ for the open-source community**
+
+[Report Bug](https://github.com/swolem12/Minovski/issues) · [Request Feature](https://github.com/swolem12/Minovski/issues) · [Join Discussion](https://github.com/swolem12/Minovski/discussions)
+
+</div>

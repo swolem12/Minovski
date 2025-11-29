@@ -18,10 +18,30 @@ export async function initOpenCV() {
     const cvModule = await import('@techstark/opencv-js');
     cv = cvModule.default || cvModule.cv || cvModule;
     
-    // Wait for OpenCV to be ready
-    if (cv.onRuntimeInitialized) {
-      await new Promise(resolve => {
-        cv.onRuntimeInitialized = resolve;
+    // Wait for OpenCV to be ready if it has an initialization callback
+    // Check if cv.Mat exists as a sign that OpenCV is initialized
+    if (typeof cv.Mat !== 'function') {
+      // OpenCV not yet ready, wait for initialization
+      await new Promise((resolve, reject) => {
+        const timeout = setTimeout(() => {
+          reject(new Error('OpenCV initialization timeout'));
+        }, 10000);
+        
+        if (cv.onRuntimeInitialized !== undefined) {
+          cv.onRuntimeInitialized = () => {
+            clearTimeout(timeout);
+            resolve();
+          };
+        } else {
+          // Check periodically if cv.Mat becomes available
+          const checkReady = setInterval(() => {
+            if (typeof cv.Mat === 'function') {
+              clearInterval(checkReady);
+              clearTimeout(timeout);
+              resolve();
+            }
+          }, 100);
+        }
       });
     }
     
@@ -102,7 +122,7 @@ export function extractContours(source, boundingBox, threshold = 50) {
     cv.findContours(edges, contours, hierarchy, cv.RETR_EXTERNAL, cv.CHAIN_APPROX_SIMPLE);
     
     // Find largest contour (main object)
-    let largestContour = null;
+    let largestContourIndex = -1;
     let maxArea = 0;
     
     for (let i = 0; i < contours.size(); i++) {
@@ -110,13 +130,14 @@ export function extractContours(source, boundingBox, threshold = 50) {
       const area = cv.contourArea(contour);
       if (area > maxArea) {
         maxArea = area;
-        largestContour = contour;
+        largestContourIndex = i;
       }
     }
     
     // Extract points from largest contour
     const points = [];
-    if (largestContour && maxArea > 100) { // Minimum area threshold
+    if (largestContourIndex >= 0 && maxArea > 100) { // Minimum area threshold
+      const largestContour = contours.get(largestContourIndex);
       // Approximate contour to reduce points
       const epsilon = 0.02 * cv.arcLength(largestContour, true);
       const approx = new cv.Mat();
@@ -222,6 +243,29 @@ export function drawFallbackOutline(ctx, boundingBox, color, lineWidth = 2) {
 }
 
 /**
+ * Draw a rounded rectangle path (polyfill for older browsers)
+ * @param {CanvasRenderingContext2D} ctx - Canvas context
+ * @param {number} x - X position
+ * @param {number} y - Y position
+ * @param {number} width - Width
+ * @param {number} height - Height
+ * @param {number} radius - Corner radius
+ */
+function drawRoundedRect(ctx, x, y, width, height, radius) {
+  ctx.beginPath();
+  ctx.moveTo(x + radius, y);
+  ctx.lineTo(x + width - radius, y);
+  ctx.quadraticCurveTo(x + width, y, x + width, y + radius);
+  ctx.lineTo(x + width, y + height - radius);
+  ctx.quadraticCurveTo(x + width, y + height, x + width - radius, y + height);
+  ctx.lineTo(x + radius, y + height);
+  ctx.quadraticCurveTo(x, y + height, x, y + height - radius);
+  ctx.lineTo(x, y + radius);
+  ctx.quadraticCurveTo(x, y, x + radius, y);
+  ctx.closePath();
+}
+
+/**
  * Draw a minimal label above the detection (no box)
  * @param {CanvasRenderingContext2D} ctx - Canvas context
  * @param {string} label - Label text
@@ -240,12 +284,11 @@ export function drawMinimalLabel(ctx, label, x, y, color) {
   const height = 18;
   const labelY = Math.max(height + 4, y - 8);
   
-  // Background pill
+  // Background pill using cross-browser compatible method
   ctx.fillStyle = color;
   ctx.globalAlpha = 0.85;
-  ctx.beginPath();
   const radius = height / 2;
-  ctx.roundRect(x - padding, labelY - height, textWidth + padding * 2, height, radius);
+  drawRoundedRect(ctx, x - padding, labelY - height, textWidth + padding * 2, height, radius);
   ctx.fill();
   
   // Text
