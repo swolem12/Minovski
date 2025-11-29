@@ -1,6 +1,7 @@
 /**
  * Object Classifier for drone/aircraft detection
  * Maps COCO-SSD classes to threat categories
+ * Enhanced with altitude estimation and size-based classification
  */
 
 // COCO-SSD classes that may indicate aerial threats or vehicles
@@ -23,6 +24,9 @@ const THREAT_MAPPINGS = {
   // Other objects that could be threats
   'sports ball': { type: 'object', threat: 'low', label: 'Airborne Object' },
   'frisbee': { type: 'object', threat: 'low', label: 'Airborne Object' },
+  
+  // Additional aerial objects
+  'umbrella': { type: 'object', threat: 'low', label: 'Aerial Object' },
 };
 
 // Minimum confidence threshold for detection
@@ -32,22 +36,58 @@ const MIN_CONFIDENCE = 0.5;
 export const AERIAL_THREAT_TYPES = ['drone', 'quadcopter', 'fixed-wing', 'helicopter'];
 
 // All trackable types that should have Minovsky particle trails
-export const TRACKABLE_TYPES = ['drone', 'quadcopter', 'fixed-wing', 'helicopter', 'person', 'hand', 'vehicle'];
+export const TRACKABLE_TYPES = ['drone', 'quadcopter', 'fixed-wing', 'helicopter', 'person', 'hand', 'vehicle', 'object'];
 
 // Hand position estimation constants (proportional positions within person bounding box)
-// Left hand is estimated at 15% from left edge, right hand at 85% from left edge
-// Hands are estimated at 60% down from top of bounding box (roughly arm level)
 const HAND_POSITION_LEFT_X = 0.15;
 const HAND_POSITION_RIGHT_X = 0.85;
 const HAND_POSITION_Y = 0.6;
 
-// Simulated drone detection keywords for demo purposes
-// In production, you'd use a custom-trained model
-const DEMO_KEYWORDS = ['drone', 'quadcopter', 'helicopter', 'aircraft', 'uav', 'suas'];
+// Size thresholds for altitude estimation (as percentage of screen)
+const SIZE_THRESHOLDS = {
+  veryClose: 0.3,   // > 30% of screen = very close
+  close: 0.15,      // > 15% = close
+  medium: 0.05,     // > 5% = medium distance
+  far: 0.02,        // > 2% = far
+  veryFar: 0        // < 2% = very far
+};
+
+/**
+ * Estimate relative altitude/distance based on object size
+ * @param {Object} boundingBox - Object bounding box
+ * @param {number} canvasWidth - Canvas width
+ * @param {number} canvasHeight - Canvas height
+ * @returns {Object} Altitude estimation {level, label, screenPercentage}
+ */
+export function estimateAltitude(boundingBox, canvasWidth, canvasHeight) {
+  const screenArea = canvasWidth * canvasHeight;
+  const objectArea = boundingBox.width * boundingBox.height;
+  const screenPercentage = objectArea / screenArea;
+  
+  let level, label;
+  
+  if (screenPercentage > SIZE_THRESHOLDS.veryClose) {
+    level = 'very-close';
+    label = 'VERY CLOSE';
+  } else if (screenPercentage > SIZE_THRESHOLDS.close) {
+    level = 'close';
+    label = 'CLOSE';
+  } else if (screenPercentage > SIZE_THRESHOLDS.medium) {
+    level = 'medium';
+    label = 'MEDIUM';
+  } else if (screenPercentage > SIZE_THRESHOLDS.far) {
+    level = 'far';
+    label = 'FAR';
+  } else {
+    level = 'very-far';
+    label = 'VERY FAR';
+  }
+  
+  return { level, label, screenPercentage };
+}
 
 /**
  * Estimate hand positions within a person's bounding box
- * Returns normalized coordinates for left and right hand positions
  * @param {Object} boundingBox - Bounding box with x, y, width, height
  * @param {number} canvasWidth - Canvas width for normalization
  * @param {number} canvasHeight - Canvas height for normalization
@@ -64,6 +104,32 @@ export function estimateHandPositions(boundingBox, canvasWidth, canvasHeight) {
       y: (boundingBox.y + boundingBox.height * HAND_POSITION_Y) / canvasHeight
     }
   };
+}
+
+/**
+ * Estimate position in frame (for tracking direction of approach)
+ * @param {Object} boundingBox - Object bounding box
+ * @param {number} canvasWidth - Canvas width
+ * @param {number} canvasHeight - Canvas height
+ * @returns {Object} Position info {horizontal, vertical, quadrant}
+ */
+export function estimateFramePosition(boundingBox, canvasWidth, canvasHeight) {
+  const centerX = boundingBox.centerX / canvasWidth;
+  const centerY = boundingBox.centerY / canvasHeight;
+  
+  let horizontal, vertical;
+  
+  if (centerX < 0.33) horizontal = 'left';
+  else if (centerX > 0.67) horizontal = 'right';
+  else horizontal = 'center';
+  
+  if (centerY < 0.33) vertical = 'top';
+  else if (centerY > 0.67) vertical = 'bottom';
+  else vertical = 'center';
+  
+  const quadrant = `${vertical}-${horizontal}`;
+  
+  return { horizontal, vertical, quadrant, normalizedX: centerX, normalizedY: centerY };
 }
 
 /**
@@ -85,11 +151,29 @@ export function formatConfidence(confidence) {
 }
 
 /**
+ * Format velocity for display
+ * @param {Object} velocity - Velocity object with magnitude
+ * @returns {string} Formatted velocity string
+ */
+export function formatVelocity(velocity) {
+  if (!velocity || velocity.magnitude === 0) return 'STATIONARY';
+  
+  const speed = velocity.magnitude * 100; // Convert to more readable units
+  
+  if (speed < 1) return 'SLOW';
+  if (speed < 5) return 'MOVING';
+  if (speed < 15) return 'FAST';
+  return 'VERY FAST';
+}
+
+/**
  * Classify detected objects and determine threat level
  * @param {Object[]} predictions - COCO-SSD predictions
+ * @param {number} canvasWidth - Optional canvas width for altitude estimation
+ * @param {number} canvasHeight - Optional canvas height for altitude estimation
  * @returns {Object[]} Classified detections with threat info
  */
-export function classifyDetections(predictions) {
+export function classifyDetections(predictions, canvasWidth = 1920, canvasHeight = 1080) {
   return predictions
     .filter(pred => pred.score >= MIN_CONFIDENCE)
     .map(pred => {
@@ -100,18 +184,29 @@ export function classifyDetections(predictions) {
         label: pred.class
       };
       
+      const boundingBox = {
+        x: pred.bbox[0],
+        y: pred.bbox[1],
+        width: pred.bbox[2],
+        height: pred.bbox[3],
+        centerX: pred.bbox[0] + pred.bbox[2] / 2,
+        centerY: pred.bbox[1] + pred.bbox[3] / 2
+      };
+      
+      // Estimate altitude based on size
+      const altitude = estimateAltitude(boundingBox, canvasWidth, canvasHeight);
+      
+      // Estimate frame position
+      const framePosition = estimateFramePosition(boundingBox, canvasWidth, canvasHeight);
+      
       return {
         ...pred,
         classification: mapping,
         confidence: pred.score,
-        boundingBox: {
-          x: pred.bbox[0],
-          y: pred.bbox[1],
-          width: pred.bbox[2],
-          height: pred.bbox[3],
-          centerX: pred.bbox[0] + pred.bbox[2] / 2,
-          centerY: pred.bbox[1] + pred.bbox[3] / 2
-        }
+        boundingBox,
+        altitude,
+        framePosition,
+        timestamp: Date.now()
       };
     });
 }
@@ -131,19 +226,30 @@ export function getOverallThreatLevel(classifiedDetections) {
   let maxThreat = 'none';
   let threatScore = 0;
   let droneCount = 0;
+  let closeThreats = 0;
   
   for (const detection of classifiedDetections) {
     const level = detection.classification.threat;
     const type = detection.classification.type;
     
-    if (type === 'drone' || type === 'fixed-wing' || type === 'quadcopter') {
+    if (type === 'drone' || type === 'fixed-wing' || type === 'quadcopter' || type === 'helicopter') {
       droneCount++;
+      
+      // Close aerial threats are more dangerous
+      if (detection.altitude && ['very-close', 'close'].includes(detection.altitude.level)) {
+        closeThreats++;
+      }
     }
     
     if (threatLevels[level] > threatScore) {
       threatScore = threatLevels[level];
       maxThreat = level;
     }
+  }
+  
+  // Close threats escalate threat level
+  if (closeThreats > 0 && threatScore < threatLevels.high) {
+    return 'high';
   }
   
   // Multiple drone-like objects = higher threat
@@ -175,6 +281,23 @@ export function getThreatColor(level) {
 }
 
 /**
+ * Get color for altitude/distance level
+ * @param {string} level 
+ * @returns {string} CSS color
+ */
+export function getAltitudeColor(level) {
+  const colors = {
+    'very-close': '#ef4444',  // Red - immediate attention
+    'close': '#f97316',       // Orange
+    'medium': '#fbbf24',      // Yellow
+    'far': '#22c55e',         // Green
+    'very-far': '#60a5fa'     // Blue - distant
+  };
+  
+  return colors[level] || colors.medium;
+}
+
+/**
  * Get detection box color based on type
  * @param {string} type 
  * @returns {string} CSS color
@@ -187,7 +310,7 @@ export function getTypeColor(type) {
     helicopter: '#a855f7',
     vehicle: '#22c55e',
     person: '#06b6d4',
-    hand: '#10b981',  // Emerald green for hands
+    hand: '#10b981',
     object: '#eab308',
     unknown: '#6b7280'
   };
@@ -200,9 +323,13 @@ export default {
   getOverallThreatLevel,
   getThreatColor,
   getTypeColor,
+  getAltitudeColor,
   isAerialThreat,
   formatConfidence,
+  formatVelocity,
   estimateHandPositions,
+  estimateAltitude,
+  estimateFramePosition,
   THREAT_MAPPINGS,
   AERIAL_THREAT_TYPES,
   TRACKABLE_TYPES,

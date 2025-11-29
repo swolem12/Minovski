@@ -13,8 +13,6 @@ const PREFERRED_MODEL = 'yolov8';
 // Colors for threat-based highlighting
 const THREAT_COLOR = 'rgba(255, 50, 50, 1)'; // Red for threats
 const SAFE_COLOR = 'rgba(50, 255, 100, 1)'; // Green for non-threats
-const THREAT_FILL = 'rgba(255, 50, 50, 0.4)'; // Red fill at 40% opacity
-const SAFE_FILL = 'rgba(50, 255, 100, 0.4)'; // Green fill at 40% opacity
 
 function FullScreenCamera({ onClose, onDetections, onThreatLevel }) {
   const videoRef = useRef(null);
@@ -311,18 +309,8 @@ function FullScreenCamera({ onClose, onDetections, onThreatLevel }) {
           
           // Choose color based on threat status: red for threats, green for non-threats
           const strokeColor = isThreat ? THREAT_COLOR : SAFE_COLOR;
-          const fillColor = isThreat ? THREAT_FILL : SAFE_FILL;
           
-          // Draw filled bounding box with 40% opacity
-          ctx.fillStyle = fillColor;
-          ctx.fillRect(
-            boundingBox.x,
-            boundingBox.y,
-            boundingBox.width,
-            boundingBox.height
-          );
-          
-          // Draw solid outline around the object
+          // Draw only the outline around the object (no fill)
           ctx.strokeStyle = strokeColor;
           ctx.lineWidth = 3;
           ctx.setLineDash([]);
@@ -333,8 +321,8 @@ function FullScreenCamera({ onClose, onDetections, onThreatLevel }) {
             boundingBox.height
           );
           
-          // Draw tactical corner brackets
-          const cornerSize = Math.min(boundingBox.width, boundingBox.height) * 0.15;
+          // Draw tactical corner brackets for better object outline visibility
+          const cornerSize = Math.min(boundingBox.width, boundingBox.height) * 0.2;
           ctx.lineWidth = 4;
           
           // Top-left corner
@@ -365,8 +353,9 @@ function FullScreenCamera({ onClose, onDetections, onThreatLevel }) {
           ctx.lineTo(boundingBox.x + boundingBox.width, boundingBox.y + boundingBox.height - cornerSize);
           ctx.stroke();
           
-          // Draw label
-          const label = `${classification.label.toUpperCase()} ${formatConfidence(confidence)}`;
+          // Draw label with altitude info for aerial threats
+          const altitudeLabel = detection.altitude ? ` [${detection.altitude.label}]` : '';
+          const label = `${classification.label.toUpperCase()} ${formatConfidence(confidence)}${isThreat ? altitudeLabel : ''}`;
           ctx.font = 'bold 12px Inter, sans-serif';
           const textWidth = ctx.measureText(label).width;
           
