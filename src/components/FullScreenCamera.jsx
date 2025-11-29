@@ -3,12 +3,18 @@ import * as tf from '@tensorflow/tfjs';
 import * as cocoSsd from '@tensorflow-models/coco-ssd';
 import { animate } from 'animejs';
 import FluidSimulation from '../utils/fluidSimulation';
-import { classifyDetections as classifyCocoDetections, getOverallThreatLevel, getTypeColor, getThreatColor, isAerialThreat, formatConfidence, estimateHandPositions, AERIAL_THREAT_TYPES, TRACKABLE_TYPES } from '../utils/objectClassifier';
+import { classifyDetections as classifyCocoDetections, getOverallThreatLevel, getTypeColor, getThreatColor, isAerialThreat, formatConfidence, estimateHandPositions, TRACKABLE_TYPES } from '../utils/objectClassifier';
 import { yolov8Detector } from '../utils/yolov8Detector';
 import audioAlert from '../utils/audioAlert';
 import './FullScreenCamera.css';
 
 const PREFERRED_MODEL = 'yolov8';
+
+// Colors for threat-based highlighting
+const THREAT_COLOR = 'rgba(255, 50, 50, 1)'; // Red for threats
+const SAFE_COLOR = 'rgba(50, 255, 100, 1)'; // Green for non-threats
+const THREAT_FILL = 'rgba(255, 50, 50, 0.4)'; // Red fill at 40% opacity
+const SAFE_FILL = 'rgba(50, 255, 100, 0.4)'; // Green fill at 40% opacity
 
 function FullScreenCamera({ onClose, onDetections, onThreatLevel }) {
   const videoRef = useRef(null);
@@ -25,6 +31,17 @@ function FullScreenCamera({ onClose, onDetections, onThreatLevel }) {
   const [detections, setDetections] = useState([]);
   const fluidSimRef = useRef(null);
   const animationRef = useRef(null);
+  const streamRef = useRef(null);
+  const trackRef = useRef(null);
+  
+  // Camera capabilities state
+  const [cameraCapabilities, setCameraCapabilities] = useState({
+    zoom: { min: 1, max: 1, step: 0.1, supported: false },
+    torch: { supported: false, enabled: false },
+    focusMode: { supported: false, modes: [] }
+  });
+  const [zoomLevel, setZoomLevel] = useState(1);
+  const [torchEnabled, setTorchEnabled] = useState(false);
   
   // Initialize detection model
   useEffect(() => {
@@ -88,16 +105,76 @@ function FullScreenCamera({ onClose, onDetections, onThreatLevel }) {
     try {
       setError(null);
       
+      // Advanced camera constraints for better capabilities
       const constraints = {
         video: {
           facingMode: 'environment',
           width: { ideal: 1920 },
-          height: { ideal: 1080 }
+          height: { ideal: 1080 },
+          // Request advanced features if available
+          advanced: [
+            { zoom: true },
+            { torch: true },
+            { focusMode: 'continuous' }
+          ]
         },
         audio: false
       };
       
       const stream = await navigator.mediaDevices.getUserMedia(constraints);
+      streamRef.current = stream;
+      
+      // Get video track and its capabilities
+      const videoTrack = stream.getVideoTracks()[0];
+      trackRef.current = videoTrack;
+      
+      if (videoTrack) {
+        const capabilities = videoTrack.getCapabilities ? videoTrack.getCapabilities() : {};
+        const settings = videoTrack.getSettings ? videoTrack.getSettings() : {};
+        
+        // Check for zoom capability
+        const zoomSupported = capabilities.zoom !== undefined;
+        const zoomMin = capabilities.zoom?.min || 1;
+        const zoomMax = capabilities.zoom?.max || 1;
+        const zoomStep = capabilities.zoom?.step || 0.1;
+        
+        // Check for torch (flashlight) capability for night vision
+        const torchSupported = capabilities.torch !== undefined;
+        
+        // Check for focus modes
+        const focusModes = capabilities.focusMode || [];
+        
+        setCameraCapabilities({
+          zoom: { 
+            min: zoomMin, 
+            max: zoomMax, 
+            step: zoomStep, 
+            supported: zoomSupported && zoomMax > 1 
+          },
+          torch: { 
+            supported: torchSupported, 
+            enabled: settings.torch || false 
+          },
+          focusMode: { 
+            supported: focusModes.length > 0, 
+            modes: focusModes 
+          }
+        });
+        
+        // Set initial zoom level
+        if (settings.zoom) {
+          setZoomLevel(settings.zoom);
+        }
+        
+        // Enable continuous focus if supported
+        if (focusModes.includes('continuous')) {
+          try {
+            await videoTrack.applyConstraints({ focusMode: 'continuous' });
+          } catch (e) {
+            console.warn('Could not set continuous focus:', e);
+          }
+        }
+      }
       
       if (videoRef.current) {
         videoRef.current.srcObject = stream;
@@ -124,6 +201,37 @@ function FullScreenCamera({ onClose, onDetections, onThreatLevel }) {
     }
   }, []);
   
+  // Handle zoom change
+  const handleZoomChange = useCallback(async (newZoom) => {
+    if (!trackRef.current || !cameraCapabilities.zoom.supported) return;
+    
+    const clampedZoom = Math.max(
+      cameraCapabilities.zoom.min,
+      Math.min(cameraCapabilities.zoom.max, newZoom)
+    );
+    
+    try {
+      await trackRef.current.applyConstraints({ advanced: [{ zoom: clampedZoom }] });
+      setZoomLevel(clampedZoom);
+    } catch (err) {
+      console.warn('Could not set zoom:', err);
+    }
+  }, [cameraCapabilities.zoom]);
+  
+  // Toggle torch (flashlight) for night vision
+  const toggleTorch = useCallback(async () => {
+    if (!trackRef.current || !cameraCapabilities.torch.supported) return;
+    
+    const newTorchState = !torchEnabled;
+    
+    try {
+      await trackRef.current.applyConstraints({ advanced: [{ torch: newTorchState }] });
+      setTorchEnabled(newTorchState);
+    } catch (err) {
+      console.warn('Could not toggle torch:', err);
+    }
+  }, [cameraCapabilities.torch.supported, torchEnabled]);
+  
   // Auto-start camera when model is loaded - use requestAnimationFrame to avoid synchronous setState
   useEffect(() => {
     if (!isLoading && model && !cameraActive && !error) {
@@ -143,6 +251,11 @@ function FullScreenCamera({ onClose, onDetections, onThreatLevel }) {
       videoRef.current.srcObject = null;
       setCameraActive(false);
     }
+    
+    streamRef.current = null;
+    trackRef.current = null;
+    setTorchEnabled(false);
+    setZoomLevel(1);
     
     if (animationRef.current) {
       cancelAnimationFrame(animationRef.current);
@@ -192,15 +305,37 @@ function FullScreenCamera({ onClose, onDetections, onThreatLevel }) {
         
         for (const detection of classifiedDetections) {
           const { boundingBox, classification, confidence } = detection;
-          const color = getTypeColor(classification.type);
           
-          // Draw tactical-style bounding box
-          ctx.strokeStyle = color;
-          ctx.lineWidth = 2;
+          // Determine if this is a threat (aerial threat types are threats)
+          const isThreat = isAerialThreat(detection);
+          
+          // Choose color based on threat status: red for threats, green for non-threats
+          const strokeColor = isThreat ? THREAT_COLOR : SAFE_COLOR;
+          const fillColor = isThreat ? THREAT_FILL : SAFE_FILL;
+          
+          // Draw filled bounding box with 40% opacity
+          ctx.fillStyle = fillColor;
+          ctx.fillRect(
+            boundingBox.x,
+            boundingBox.y,
+            boundingBox.width,
+            boundingBox.height
+          );
+          
+          // Draw solid outline around the object
+          ctx.strokeStyle = strokeColor;
+          ctx.lineWidth = 3;
           ctx.setLineDash([]);
+          ctx.strokeRect(
+            boundingBox.x,
+            boundingBox.y,
+            boundingBox.width,
+            boundingBox.height
+          );
           
-          // Corner brackets style
+          // Draw tactical corner brackets
           const cornerSize = Math.min(boundingBox.width, boundingBox.height) * 0.15;
+          ctx.lineWidth = 4;
           
           // Top-left corner
           ctx.beginPath();
@@ -235,7 +370,7 @@ function FullScreenCamera({ onClose, onDetections, onThreatLevel }) {
           ctx.font = 'bold 12px Inter, sans-serif';
           const textWidth = ctx.measureText(label).width;
           
-          ctx.fillStyle = 'rgba(0, 0, 0, 0.7)';
+          ctx.fillStyle = isThreat ? 'rgba(255, 50, 50, 0.9)' : 'rgba(50, 255, 100, 0.9)';
           ctx.fillRect(
             boundingBox.x,
             boundingBox.y - 22,
@@ -243,7 +378,7 @@ function FullScreenCamera({ onClose, onDetections, onThreatLevel }) {
             20
           );
           
-          ctx.fillStyle = color;
+          ctx.fillStyle = '#ffffff';
           ctx.fillText(
             label,
             boundingBox.x + 6,
@@ -255,13 +390,14 @@ function FullScreenCamera({ onClose, onDetections, onThreatLevel }) {
             const normalizedY = boundingBox.centerY / canvas.height;
             // Create unique object ID for trajectory tracking
             const objectId = `${classification.type}_${Math.round(boundingBox.x)}_${Math.round(boundingBox.y)}`;
-            fluidSimRef.current?.addTrailPoint(normalizedX, normalizedY, classification.type, objectId);
+            // Pass threat status to fluid simulation for color
+            fluidSimRef.current?.addTrailPoint(normalizedX, normalizedY, classification.type, objectId, isThreat);
             
             // For person detections, also track estimated hand positions for movement tracking
             if (classification.type === 'person') {
               const handPositions = estimateHandPositions(boundingBox, canvas.width, canvas.height);
-              fluidSimRef.current?.addTrailPoint(handPositions.leftHand.x, handPositions.leftHand.y, 'hand', `${objectId}_left_hand`);
-              fluidSimRef.current?.addTrailPoint(handPositions.rightHand.x, handPositions.rightHand.y, 'hand', `${objectId}_right_hand`);
+              fluidSimRef.current?.addTrailPoint(handPositions.leftHand.x, handPositions.leftHand.y, 'hand', `${objectId}_left_hand`, isThreat);
+              fluidSimRef.current?.addTrailPoint(handPositions.rightHand.x, handPositions.rightHand.y, 'hand', `${objectId}_right_hand`, isThreat);
             }
           }
         }
@@ -413,6 +549,38 @@ function FullScreenCamera({ onClose, onDetections, onThreatLevel }) {
               {modelType === 'yolov8' ? 'YOLOV8 ONNX' : 'COCO-SSD'} ACTIVE
             </div>
           </div>
+          
+          {/* Camera controls */}
+          {cameraActive && (cameraCapabilities.zoom.supported || cameraCapabilities.torch.supported) && (
+            <div className="fs-camera-controls">
+              {cameraCapabilities.zoom.supported && (
+                <div className="fs-zoom-control">
+                  <span className="fs-control-label">ZOOM</span>
+                  <input
+                    type="range"
+                    min={cameraCapabilities.zoom.min}
+                    max={cameraCapabilities.zoom.max}
+                    step={cameraCapabilities.zoom.step}
+                    value={zoomLevel}
+                    onChange={(e) => handleZoomChange(parseFloat(e.target.value))}
+                    className="fs-zoom-slider"
+                  />
+                  <span className="fs-zoom-value">{zoomLevel.toFixed(1)}x</span>
+                </div>
+              )}
+              
+              {cameraCapabilities.torch.supported && (
+                <button 
+                  className={`fs-btn-torch ${torchEnabled ? 'active' : ''}`}
+                  onClick={toggleTorch}
+                  title="Toggle flashlight for low-light conditions"
+                >
+                  <span className="fs-torch-icon">{torchEnabled ? '◉' : '○'}</span>
+                  <span>NIGHT VISION</span>
+                </button>
+              )}
+            </div>
+          )}
         </div>
         
         {/* Side panel */}

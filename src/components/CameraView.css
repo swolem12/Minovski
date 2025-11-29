@@ -129,6 +129,101 @@
   font-size: 14px;
 }
 
+/* Camera Capability Controls */
+.camera-capabilities {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  flex: 1;
+  justify-content: center;
+}
+
+.zoom-control {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.control-label {
+  font-size: 10px;
+  font-weight: 600;
+  color: #8b8f9a;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+}
+
+.zoom-slider {
+  width: 100px;
+  height: 4px;
+  appearance: none;
+  background: rgba(0, 212, 255, 0.2);
+  border-radius: 2px;
+  cursor: pointer;
+}
+
+.zoom-slider::-webkit-slider-thumb {
+  appearance: none;
+  width: 16px;
+  height: 16px;
+  background: #00d4ff;
+  border-radius: 50%;
+  cursor: pointer;
+  transition: transform 0.2s;
+}
+
+.zoom-slider::-webkit-slider-thumb:hover {
+  transform: scale(1.2);
+}
+
+.zoom-slider::-moz-range-thumb {
+  width: 16px;
+  height: 16px;
+  background: #00d4ff;
+  border-radius: 50%;
+  cursor: pointer;
+  border: none;
+}
+
+.zoom-value {
+  font-size: 11px;
+  font-weight: 600;
+  color: #00d4ff;
+  min-width: 35px;
+  text-align: center;
+}
+
+.btn-torch {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  font-size: 10px;
+  font-weight: 600;
+  background: rgba(255, 200, 50, 0.1);
+  border: 1px solid rgba(255, 200, 50, 0.3);
+  border-radius: 4px;
+  color: #ffc832;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.btn-torch:hover {
+  background: rgba(255, 200, 50, 0.2);
+  border-color: rgba(255, 200, 50, 0.5);
+}
+
+.btn-torch.active {
+  background: #ffc832;
+  color: #050508;
+  border-color: #ffc832;
+}
+
+.torch-icon {
+  font-size: 14px;
+}
+
 /* Permission/Start Tracking Overlay */
 .permission-overlay {
   position: absolute;

@@ -3,13 +3,19 @@ import * as tf from '@tensorflow/tfjs';
 import * as cocoSsd from '@tensorflow-models/coco-ssd';
 import { animate } from 'animejs';
 import FluidSimulation from '../utils/fluidSimulation';
-import { classifyDetections as classifyCocoDetections, getOverallThreatLevel, getTypeColor, estimateHandPositions, TRACKABLE_TYPES } from '../utils/objectClassifier';
+import { classifyDetections as classifyCocoDetections, getOverallThreatLevel, isAerialThreat, estimateHandPositions, TRACKABLE_TYPES } from '../utils/objectClassifier';
 import { yolov8Detector } from '../utils/yolov8Detector';
 import audioAlert from '../utils/audioAlert';
 import './CameraView.css';
 
 // Model type: 'yolov8' or 'coco-ssd'
 const PREFERRED_MODEL = 'yolov8';
+
+// Colors for threat-based highlighting
+const THREAT_COLOR = 'rgba(255, 50, 50, 1)'; // Red for threats
+const SAFE_COLOR = 'rgba(50, 255, 100, 1)'; // Green for non-threats
+const THREAT_FILL = 'rgba(255, 50, 50, 0.4)'; // Red fill at 40% opacity
+const SAFE_FILL = 'rgba(50, 255, 100, 0.4)'; // Green fill at 40% opacity
 
 function CameraView({ onDetections, onThreatLevel, isActive = true }) {
   const videoRef = useRef(null);
@@ -26,6 +32,17 @@ function CameraView({ onDetections, onThreatLevel, isActive = true }) {
   const fluidSimRef = useRef(null);
   const animationRef = useRef(null);
   const lastDetectionsRef = useRef([]);
+  const streamRef = useRef(null);
+  const trackRef = useRef(null);
+  
+  // Camera capabilities state
+  const [cameraCapabilities, setCameraCapabilities] = useState({
+    zoom: { min: 1, max: 1, step: 0.1, supported: false },
+    torch: { supported: false, enabled: false },
+    focusMode: { supported: false, modes: [] }
+  });
+  const [zoomLevel, setZoomLevel] = useState(1);
+  const [torchEnabled, setTorchEnabled] = useState(false);
   
   // Initialize detection model (YOLOv8 preferred, COCO-SSD fallback)
   useEffect(() => {
@@ -117,19 +134,79 @@ function CameraView({ onDetections, onThreatLevel, isActive = true }) {
     try {
       setError(null);
       
+      // Advanced camera constraints for better capabilities
       const constraints = {
         video: {
           facingMode: 'environment', // Rear camera preferred
-          width: { ideal: 1280 },
-          height: { ideal: 720 }
+          width: { ideal: 1920 },
+          height: { ideal: 1080 },
+          // Request advanced features if available
+          advanced: [
+            { zoom: true },
+            { torch: true },
+            { focusMode: 'continuous' }
+          ]
         },
         audio: false
       };
       
       // This will trigger the permission dialog
       const stream = await navigator.mediaDevices.getUserMedia(constraints);
+      streamRef.current = stream;
       
       setPermissionStatus('granted');
+      
+      // Get video track and its capabilities
+      const videoTrack = stream.getVideoTracks()[0];
+      trackRef.current = videoTrack;
+      
+      if (videoTrack) {
+        const capabilities = videoTrack.getCapabilities ? videoTrack.getCapabilities() : {};
+        const settings = videoTrack.getSettings ? videoTrack.getSettings() : {};
+        
+        // Check for zoom capability
+        const zoomSupported = capabilities.zoom !== undefined;
+        const zoomMin = capabilities.zoom?.min || 1;
+        const zoomMax = capabilities.zoom?.max || 1;
+        const zoomStep = capabilities.zoom?.step || 0.1;
+        
+        // Check for torch (flashlight) capability for night vision
+        const torchSupported = capabilities.torch !== undefined;
+        
+        // Check for focus modes
+        const focusModes = capabilities.focusMode || [];
+        
+        setCameraCapabilities({
+          zoom: { 
+            min: zoomMin, 
+            max: zoomMax, 
+            step: zoomStep, 
+            supported: zoomSupported && zoomMax > 1 
+          },
+          torch: { 
+            supported: torchSupported, 
+            enabled: settings.torch || false 
+          },
+          focusMode: { 
+            supported: focusModes.length > 0, 
+            modes: focusModes 
+          }
+        });
+        
+        // Set initial zoom level
+        if (settings.zoom) {
+          setZoomLevel(settings.zoom);
+        }
+        
+        // Enable continuous focus if supported
+        if (focusModes.includes('continuous')) {
+          try {
+            await videoTrack.applyConstraints({ focusMode: 'continuous' });
+          } catch (e) {
+            console.warn('Could not set continuous focus:', e);
+          }
+        }
+      }
       
       if (videoRef.current) {
         videoRef.current.srcObject = stream;
@@ -159,6 +236,37 @@ function CameraView({ onDetections, onThreatLevel, isActive = true }) {
     }
   }, []);
   
+  // Handle zoom change
+  const handleZoomChange = useCallback(async (newZoom) => {
+    if (!trackRef.current || !cameraCapabilities.zoom.supported) return;
+    
+    const clampedZoom = Math.max(
+      cameraCapabilities.zoom.min,
+      Math.min(cameraCapabilities.zoom.max, newZoom)
+    );
+    
+    try {
+      await trackRef.current.applyConstraints({ advanced: [{ zoom: clampedZoom }] });
+      setZoomLevel(clampedZoom);
+    } catch (err) {
+      console.warn('Could not set zoom:', err);
+    }
+  }, [cameraCapabilities.zoom]);
+  
+  // Toggle torch (flashlight) for night vision
+  const toggleTorch = useCallback(async () => {
+    if (!trackRef.current || !cameraCapabilities.torch.supported) return;
+    
+    const newTorchState = !torchEnabled;
+    
+    try {
+      await trackRef.current.applyConstraints({ advanced: [{ torch: newTorchState }] });
+      setTorchEnabled(newTorchState);
+    } catch (err) {
+      console.warn('Could not toggle torch:', err);
+    }
+  }, [cameraCapabilities.torch.supported, torchEnabled]);
+  
   // Stop camera
   const stopCamera = useCallback(() => {
     if (videoRef.current && videoRef.current.srcObject) {
@@ -167,6 +275,11 @@ function CameraView({ onDetections, onThreatLevel, isActive = true }) {
       videoRef.current.srcObject = null;
       setCameraActive(false);
     }
+    
+    streamRef.current = null;
+    trackRef.current = null;
+    setTorchEnabled(false);
+    setZoomLevel(1);
     
     if (animationRef.current) {
       cancelAnimationFrame(animationRef.current);
@@ -222,10 +335,25 @@ function CameraView({ onDetections, onThreatLevel, isActive = true }) {
         // Draw detection boxes and update fluid trails
         for (const detection of classifiedDetections) {
           const { boundingBox, classification, confidence } = detection;
-          const color = getTypeColor(classification.type);
           
-          // Draw bounding box
-          ctx.strokeStyle = color;
+          // Determine if this is a threat (aerial threat types are threats)
+          const isThreat = isAerialThreat(detection);
+          
+          // Choose color based on threat status: red for threats, green for non-threats
+          const strokeColor = isThreat ? THREAT_COLOR : SAFE_COLOR;
+          const fillColor = isThreat ? THREAT_FILL : SAFE_FILL;
+          
+          // Draw filled bounding box with 40% opacity
+          ctx.fillStyle = fillColor;
+          ctx.fillRect(
+            boundingBox.x,
+            boundingBox.y,
+            boundingBox.width,
+            boundingBox.height
+          );
+          
+          // Draw solid outline around the object
+          ctx.strokeStyle = strokeColor;
           ctx.lineWidth = 3;
           ctx.strokeRect(
             boundingBox.x,
@@ -236,10 +364,10 @@ function CameraView({ onDetections, onThreatLevel, isActive = true }) {
           
           // Draw label background
           const label = `${classification.label} ${Math.round(confidence * 100)}%`;
-          ctx.font = '16px Inter, sans-serif';
+          ctx.font = 'bold 14px Inter, sans-serif';
           const textWidth = ctx.measureText(label).width;
           
-          ctx.fillStyle = color;
+          ctx.fillStyle = isThreat ? 'rgba(255, 50, 50, 0.9)' : 'rgba(50, 255, 100, 0.9)';
           ctx.fillRect(
             boundingBox.x,
             boundingBox.y - 25,
@@ -255,19 +383,20 @@ function CameraView({ onDetections, onThreatLevel, isActive = true }) {
             boundingBox.y - 7
           );
           
-          // Add fluid trail for trackable detections (including persons for testing)
+          // Add fluid trail for trackable detections
           if (TRACKABLE_TYPES.includes(classification.type)) {
             const normalizedX = boundingBox.centerX / canvas.width;
             const normalizedY = boundingBox.centerY / canvas.height;
             // Create unique object ID for trajectory tracking
             const objectId = `${classification.type}_${Math.round(boundingBox.x)}_${Math.round(boundingBox.y)}`;
-            fluidSimRef.current?.addTrailPoint(normalizedX, normalizedY, classification.type, objectId);
+            // Pass threat status to fluid simulation for color
+            fluidSimRef.current?.addTrailPoint(normalizedX, normalizedY, classification.type, objectId, isThreat);
             
             // For person detections, also track estimated hand positions for movement tracking
             if (classification.type === 'person') {
               const handPositions = estimateHandPositions(boundingBox, canvas.width, canvas.height);
-              fluidSimRef.current?.addTrailPoint(handPositions.leftHand.x, handPositions.leftHand.y, 'hand', `${objectId}_left_hand`);
-              fluidSimRef.current?.addTrailPoint(handPositions.rightHand.x, handPositions.rightHand.y, 'hand', `${objectId}_right_hand`);
+              fluidSimRef.current?.addTrailPoint(handPositions.leftHand.x, handPositions.leftHand.y, 'hand', `${objectId}_left_hand`, isThreat);
+              fluidSimRef.current?.addTrailPoint(handPositions.rightHand.x, handPositions.rightHand.y, 'hand', `${objectId}_right_hand`, isThreat);
             }
           }
         }
@@ -388,6 +517,39 @@ function CameraView({ onDetections, onThreatLevel, isActive = true }) {
               {modelType === 'yolov8' ? 'YOLOv8 ONNX' : 'COCO-SSD'}
             </span>
           </div>
+          
+          {/* Camera capability controls */}
+          <div className="camera-capabilities">
+            {/* Zoom control */}
+            {cameraCapabilities.zoom.supported && (
+              <div className="zoom-control">
+                <span className="control-label">Zoom</span>
+                <input
+                  type="range"
+                  min={cameraCapabilities.zoom.min}
+                  max={cameraCapabilities.zoom.max}
+                  step={cameraCapabilities.zoom.step}
+                  value={zoomLevel}
+                  onChange={(e) => handleZoomChange(parseFloat(e.target.value))}
+                  className="zoom-slider"
+                />
+                <span className="zoom-value">{zoomLevel.toFixed(1)}x</span>
+              </div>
+            )}
+            
+            {/* Torch/Night vision control */}
+            {cameraCapabilities.torch.supported && (
+              <button 
+                className={`btn-torch ${torchEnabled ? 'active' : ''}`}
+                onClick={toggleTorch}
+                title="Toggle flashlight for low-light conditions"
+              >
+                <span className="torch-icon">{torchEnabled ? '◉' : '○'}</span>
+                <span>Night Vision</span>
+              </button>
+            )}
+          </div>
+          
           <button 
             className="btn-stop-camera"
             onClick={stopCamera}
