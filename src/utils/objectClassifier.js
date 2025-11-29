@@ -318,6 +318,51 @@ export function getTypeColor(type) {
   return colors[type] || colors.unknown;
 }
 
+// Corner bracket size ratio for detection boxes
+const CORNER_BRACKET_RATIO = 0.2;
+
+/**
+ * Draw tactical corner brackets on a canvas context
+ * @param {CanvasRenderingContext2D} ctx - Canvas 2D context
+ * @param {Object} boundingBox - Bounding box with x, y, width, height
+ * @param {string} color - Stroke color
+ * @param {number} lineWidth - Line width for brackets (default: 4)
+ */
+export function drawCornerBrackets(ctx, boundingBox, color, lineWidth = 4) {
+  const cornerSize = Math.min(boundingBox.width, boundingBox.height) * CORNER_BRACKET_RATIO;
+  
+  ctx.strokeStyle = color;
+  ctx.lineWidth = lineWidth;
+  
+  // Top-left corner
+  ctx.beginPath();
+  ctx.moveTo(boundingBox.x, boundingBox.y + cornerSize);
+  ctx.lineTo(boundingBox.x, boundingBox.y);
+  ctx.lineTo(boundingBox.x + cornerSize, boundingBox.y);
+  ctx.stroke();
+  
+  // Top-right corner
+  ctx.beginPath();
+  ctx.moveTo(boundingBox.x + boundingBox.width - cornerSize, boundingBox.y);
+  ctx.lineTo(boundingBox.x + boundingBox.width, boundingBox.y);
+  ctx.lineTo(boundingBox.x + boundingBox.width, boundingBox.y + cornerSize);
+  ctx.stroke();
+  
+  // Bottom-left corner
+  ctx.beginPath();
+  ctx.moveTo(boundingBox.x, boundingBox.y + boundingBox.height - cornerSize);
+  ctx.lineTo(boundingBox.x, boundingBox.y + boundingBox.height);
+  ctx.lineTo(boundingBox.x + cornerSize, boundingBox.y + boundingBox.height);
+  ctx.stroke();
+  
+  // Bottom-right corner
+  ctx.beginPath();
+  ctx.moveTo(boundingBox.x + boundingBox.width - cornerSize, boundingBox.y + boundingBox.height);
+  ctx.lineTo(boundingBox.x + boundingBox.width, boundingBox.y + boundingBox.height);
+  ctx.lineTo(boundingBox.x + boundingBox.width, boundingBox.y + boundingBox.height - cornerSize);
+  ctx.stroke();
+}
+
 export default {
   classifyDetections,
   getOverallThreatLevel,
@@ -330,8 +375,10 @@ export default {
   estimateHandPositions,
   estimateAltitude,
   estimateFramePosition,
+  drawCornerBrackets,
   THREAT_MAPPINGS,
   AERIAL_THREAT_TYPES,
   TRACKABLE_TYPES,
-  MIN_CONFIDENCE
+  MIN_CONFIDENCE,
+  CORNER_BRACKET_RATIO
 };

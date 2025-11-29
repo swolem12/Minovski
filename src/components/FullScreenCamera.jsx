@@ -3,7 +3,7 @@ import * as tf from '@tensorflow/tfjs';
 import * as cocoSsd from '@tensorflow-models/coco-ssd';
 import { animate } from 'animejs';
 import FluidSimulation from '../utils/fluidSimulation';
-import { classifyDetections as classifyCocoDetections, getOverallThreatLevel, getTypeColor, getThreatColor, isAerialThreat, formatConfidence, estimateHandPositions, TRACKABLE_TYPES } from '../utils/objectClassifier';
+import { classifyDetections as classifyCocoDetections, getOverallThreatLevel, getTypeColor, getThreatColor, isAerialThreat, formatConfidence, estimateHandPositions, drawCornerBrackets, TRACKABLE_TYPES } from '../utils/objectClassifier';
 import { yolov8Detector } from '../utils/yolov8Detector';
 import audioAlert from '../utils/audioAlert';
 import './FullScreenCamera.css';
@@ -322,36 +322,7 @@ function FullScreenCamera({ onClose, onDetections, onThreatLevel }) {
           );
           
           // Draw tactical corner brackets for better object outline visibility
-          const cornerSize = Math.min(boundingBox.width, boundingBox.height) * 0.2;
-          ctx.lineWidth = 4;
-          
-          // Top-left corner
-          ctx.beginPath();
-          ctx.moveTo(boundingBox.x, boundingBox.y + cornerSize);
-          ctx.lineTo(boundingBox.x, boundingBox.y);
-          ctx.lineTo(boundingBox.x + cornerSize, boundingBox.y);
-          ctx.stroke();
-          
-          // Top-right corner
-          ctx.beginPath();
-          ctx.moveTo(boundingBox.x + boundingBox.width - cornerSize, boundingBox.y);
-          ctx.lineTo(boundingBox.x + boundingBox.width, boundingBox.y);
-          ctx.lineTo(boundingBox.x + boundingBox.width, boundingBox.y + cornerSize);
-          ctx.stroke();
-          
-          // Bottom-left corner
-          ctx.beginPath();
-          ctx.moveTo(boundingBox.x, boundingBox.y + boundingBox.height - cornerSize);
-          ctx.lineTo(boundingBox.x, boundingBox.y + boundingBox.height);
-          ctx.lineTo(boundingBox.x + cornerSize, boundingBox.y + boundingBox.height);
-          ctx.stroke();
-          
-          // Bottom-right corner
-          ctx.beginPath();
-          ctx.moveTo(boundingBox.x + boundingBox.width - cornerSize, boundingBox.y + boundingBox.height);
-          ctx.lineTo(boundingBox.x + boundingBox.width, boundingBox.y + boundingBox.height);
-          ctx.lineTo(boundingBox.x + boundingBox.width, boundingBox.y + boundingBox.height - cornerSize);
-          ctx.stroke();
+          drawCornerBrackets(ctx, boundingBox, strokeColor, 4);
           
           // Draw label with altitude info for aerial threats
           const altitudeLabel = detection.altitude ? ` [${detection.altitude.label}]` : '';
