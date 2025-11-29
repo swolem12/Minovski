@@ -6,11 +6,13 @@
 import Tracker from '@openreplay/tracker';
 import trackerAssist from '@openreplay/tracker-assist';
 
+// Project key can be configured via environment variable or defaults to the provided key
+// Note: OpenReplay project keys are designed to be client-side and are not secret credentials
+const PROJECT_KEY = import.meta.env.VITE_OPENREPLAY_PROJECT_KEY || "zXFPKcQIDn8QaN6cHeq1";
+
 // Initialize the OpenReplay tracker
 const tracker = new Tracker({
-  projectKey: "zXFPKcQIDn8QaN6cHeq1",
-  // Optional: Add additional configuration
-  __DISABLE_SECURE_MODE: import.meta.env.DEV, // Disable secure mode in development
+  projectKey: PROJECT_KEY,
 });
 
 // Enable the assist plugin for live session support
