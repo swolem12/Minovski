@@ -112,18 +112,18 @@
 
 /* Responsive */
 @media (max-width: 900px) {
-  .tracking-main {
+  .tracking-page .tracking-main {
     grid-template-columns: 1fr;
     gap: 15px;
   }
   
-  /* Keep camera section first on mobile, sidebar below */
-  .tracking-main .camera-section {
-    order: 0 !important;
+  /* Keep camera section first on mobile, sidebar below - use higher specificity instead of !important */
+  .tracking-page .tracking-main .camera-section {
+    order: 0;
   }
   
-  .tracking-main .sidebar {
-    order: 1 !important;
+  .tracking-page .tracking-main .sidebar {
+    order: 1;
   }
   
   .tracking-header {

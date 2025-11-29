@@ -331,7 +331,7 @@
   }
   
   .video-container {
-    aspect-ratio: 4 / 3; /* Better aspect ratio for mobile */
+    aspect-ratio: 4 / 3; /* Changed from 16/9 for better mobile fit */
   }
   
   .camera-controls {
