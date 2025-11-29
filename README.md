@@ -103,6 +103,44 @@ npm run preview
 
 This is a prototype/demonstration application. For optimal drone detection, train a custom YOLOv8 model on drone datasets.
 
+## 🎓 Drone Detection Training Resources
+
+For better drone detection accuracy, you can train a custom YOLO model using these open-source datasets:
+
+### Recommended Datasets
+
+| Dataset | Description | Size | Link |
+|---------|-------------|------|------|
+| **Seraphim Drone Detection Dataset** | Curated collection of 83,000+ drone images in YOLO format from 23 open-source datasets. Ideal for training robust detection models. | 83,483 images | [HuggingFace](https://huggingface.co/datasets/lgrzybowski/seraphim-drone-detection-dataset) / [GitHub](https://github.com/Seraphim-Defence-Systems/seraphim-drone-detection-dataset) |
+| **Drone Detection YOLOv11x** | Pre-trained YOLOv11x weights for drone detection with 90.5% mAP@50. Includes heatmap visualization. | 1,359 images | [GitHub](https://github.com/doguilmak/Drone-Detection-YOLOv11x) / [HuggingFace Weights](https://huggingface.co/doguilmak/Drone-Detection-YOLOv11x) |
+| **Military Drone Detection** | Detects Shahed-136, Lancet, Orlan-10, and other military UAVs with 94.8% mAP50. | Synthetic data | [GitHub](https://github.com/takzen/yolo-military-drone-detection) |
+| **Drone Detection Dataset** | Labeled drone images from Kaggle and Mendeley sources for diverse training. | Various | [GitHub](https://github.com/tarlanahad/drone-detection-dataset) |
+
+### Training Your Own Model
+
+```bash
+# Install Ultralytics YOLO
+pip install ultralytics
+
+# Download a drone dataset (example using Seraphim dataset)
+# wget https://huggingface.co/datasets/lgrzybowski/seraphim-drone-detection-dataset/resolve/main/data.zip
+
+# Train YOLOv8 on drone dataset
+yolo detect train data=drone_dataset/data.yaml model=yolov8n.pt epochs=100 imgsz=640
+
+# Export to ONNX for browser use
+yolo export model=runs/detect/train/weights/best.pt format=onnx imgsz=640 simplify=True
+
+# Copy to Minovski public folder
+cp runs/detect/train/weights/best.onnx public/models/yolov8n.onnx
+```
+
+### Using Pre-trained Drone Weights
+
+You can download pre-trained drone detection weights from:
+- [Drone-Detection-YOLOv11x](https://huggingface.co/doguilmak/Drone-Detection-YOLOv11x/tree/main/weight)
+- Convert to ONNX format and place in `public/models/` directory
+
 ## 📜 License
 
 MIT License

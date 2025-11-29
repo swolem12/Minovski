@@ -3,7 +3,7 @@ import * as tf from '@tensorflow/tfjs';
 import * as cocoSsd from '@tensorflow-models/coco-ssd';
 import { animate } from 'animejs';
 import FluidSimulation from '../utils/fluidSimulation';
-import { classifyDetections as classifyCocoDetections, getOverallThreatLevel, getTypeColor } from '../utils/objectClassifier';
+import { classifyDetections as classifyCocoDetections, getOverallThreatLevel, getTypeColor, TRACKABLE_TYPES } from '../utils/objectClassifier';
 import { yolov8Detector } from '../utils/yolov8Detector';
 import audioAlert from '../utils/audioAlert';
 import './CameraView.css';
@@ -255,8 +255,8 @@ function CameraView({ onDetections, onThreatLevel, isActive = true }) {
             boundingBox.y - 7
           );
           
-          // Add fluid trail for drone-like detections
-          if (['drone', 'quadcopter', 'fixed-wing', 'helicopter'].includes(classification.type)) {
+          // Add fluid trail for trackable detections (including persons for testing)
+          if (TRACKABLE_TYPES.includes(classification.type)) {
             const normalizedX = boundingBox.centerX / canvas.width;
             const normalizedY = boundingBox.centerY / canvas.height;
             fluidSimRef.current?.addTrailPoint(normalizedX, normalizedY, classification.type);
