@@ -10,6 +10,8 @@
     "preview": "vite preview"
   },
   "dependencies": {
+    "@openreplay/tracker": "^17.0.0",
+    "@openreplay/tracker-assist": "^11.0.10",
     "@tensorflow-models/coco-ssd": "^2.2.3",
     "@tensorflow/tfjs": "^4.22.0",
     "animejs": "^4.2.2",

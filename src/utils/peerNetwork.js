@@ -6,8 +6,9 @@
 import Peer from 'peerjs';
 import { v4 as uuidv4 } from 'uuid';
 
-// Connection timeout in milliseconds
-const CONNECTION_TIMEOUT_MS = 10000;
+// Connection timeout in milliseconds - increased to allow for NAT traversal via TURN servers
+// TURN relay connections across different networks can take longer to establish
+const CONNECTION_TIMEOUT_MS = 30000;
 
 class PeerNetwork {
   constructor() {
@@ -50,25 +51,38 @@ class PeerNetwork {
               { urls: 'stun:stun2.l.google.com:19302' },
               { urls: 'stun:stun3.l.google.com:19302' },
               { urls: 'stun:stun4.l.google.com:19302' },
+              // OpenRelay STUN servers
+              { urls: 'stun:openrelay.metered.ca:80' },
               // Free public TURN servers from OpenRelay for NAT traversal across different networks
               // These are intentionally public credentials provided by OpenRelay (metered.ca) for open-source projects
               // TURN credentials must be client-accessible for WebRTC - the service has rate limiting
+              // UDP transport on port 80 (commonly allowed through firewalls)
               {
                 urls: 'turn:openrelay.metered.ca:80',
                 username: 'openrelayproject',
                 credential: 'openrelayproject'
               },
+              // UDP transport on port 443
               {
                 urls: 'turn:openrelay.metered.ca:443',
                 username: 'openrelayproject',
                 credential: 'openrelayproject'
               },
+              // TCP transport on port 443 (for restrictive firewalls that block UDP)
               {
                 urls: 'turn:openrelay.metered.ca:443?transport=tcp',
                 username: 'openrelayproject',
                 credential: 'openrelayproject'
+              },
+              // TURNS (TLS) for most restrictive networks - appears as normal HTTPS traffic
+              {
+                urls: 'turns:openrelay.metered.ca:443',
+                username: 'openrelayproject',
+                credential: 'openrelayproject'
               }
-            ]
+            ],
+            // Pre-gather ICE candidates for faster connection establishment
+            iceCandidatePoolSize: 10
           }
         });
         
@@ -152,8 +166,9 @@ class PeerNetwork {
       }
       
       // Set a timeout for connection attempt
+      // Note: Cross-network connections via TURN may take longer to establish
       const connectionTimeout = setTimeout(() => {
-        reject(new Error('Connection timeout. Host may be offline or unreachable.'));
+        reject(new Error('Connection timeout. The host may be offline, or firewall/network restrictions are preventing the connection. Both devices need internet access for cross-network connections.'));
       }, CONNECTION_TIMEOUT_MS);
       
       conn.on('open', () => {
