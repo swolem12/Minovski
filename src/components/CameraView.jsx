@@ -3,7 +3,7 @@ import * as tf from '@tensorflow/tfjs';
 import * as cocoSsd from '@tensorflow-models/coco-ssd';
 import { animate } from 'animejs';
 import FluidSimulation from '../utils/fluidSimulation';
-import { classifyDetections as classifyCocoDetections, getOverallThreatLevel, isAerialThreat, estimateHandPositions, TRACKABLE_TYPES } from '../utils/objectClassifier';
+import { classifyDetections as classifyCocoDetections, getOverallThreatLevel, isAerialThreat, estimateHandPositions, drawCornerBrackets, TRACKABLE_TYPES } from '../utils/objectClassifier';
 import { yolov8Detector } from '../utils/yolov8Detector';
 import audioAlert from '../utils/audioAlert';
 import './CameraView.css';
@@ -14,8 +14,6 @@ const PREFERRED_MODEL = 'yolov8';
 // Colors for threat-based highlighting
 const THREAT_COLOR = 'rgba(255, 50, 50, 1)'; // Red for threats
 const SAFE_COLOR = 'rgba(50, 255, 100, 1)'; // Green for non-threats
-const THREAT_FILL = 'rgba(255, 50, 50, 0.4)'; // Red fill at 40% opacity
-const SAFE_FILL = 'rgba(50, 255, 100, 0.4)'; // Green fill at 40% opacity
 
 function CameraView({ onDetections, onThreatLevel, isActive = true }) {
   const videoRef = useRef(null);
@@ -341,18 +339,8 @@ function CameraView({ onDetections, onThreatLevel, isActive = true }) {
           
           // Choose color based on threat status: red for threats, green for non-threats
           const strokeColor = isThreat ? THREAT_COLOR : SAFE_COLOR;
-          const fillColor = isThreat ? THREAT_FILL : SAFE_FILL;
           
-          // Draw filled bounding box with 40% opacity
-          ctx.fillStyle = fillColor;
-          ctx.fillRect(
-            boundingBox.x,
-            boundingBox.y,
-            boundingBox.width,
-            boundingBox.height
-          );
-          
-          // Draw solid outline around the object
+          // Draw only the outline around the object (no fill)
           ctx.strokeStyle = strokeColor;
           ctx.lineWidth = 3;
           ctx.strokeRect(
@@ -362,8 +350,12 @@ function CameraView({ onDetections, onThreatLevel, isActive = true }) {
             boundingBox.height
           );
           
-          // Draw label background
-          const label = `${classification.label} ${Math.round(confidence * 100)}%`;
+          // Draw tactical corner brackets for better object outline visibility
+          drawCornerBrackets(ctx, boundingBox, strokeColor, 4);
+          
+          // Draw label background with altitude info for aerial threats
+          const altitudeLabel = detection.altitude ? ` [${detection.altitude.label}]` : '';
+          const label = `${classification.label} ${Math.round(confidence * 100)}%${isThreat ? altitudeLabel : ''}`;
           ctx.font = 'bold 14px Inter, sans-serif';
           const textWidth = ctx.measureText(label).width;
           
