@@ -158,3 +158,41 @@
     box-shadow: 0 0 25px rgba(220, 38, 38, 0.8);
   }
 }
+
+/* Mobile responsive styles */
+@media (max-width: 480px) {
+  .threat-display {
+    padding: 12px;
+    border-radius: 10px;
+  }
+  
+  .threat-header {
+    margin-bottom: 10px;
+  }
+  
+  .threat-level {
+    font-size: 14px;
+  }
+  
+  .threat-stats {
+    gap: 15px;
+    padding: 8px;
+    margin-bottom: 10px;
+  }
+  
+  .stat-value {
+    font-size: 20px;
+  }
+  
+  .stat-label {
+    font-size: 10px;
+  }
+  
+  .threat-item {
+    padding: 6px;
+  }
+  
+  .threat-name {
+    font-size: 13px;
+  }
+}

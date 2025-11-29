@@ -25,6 +25,7 @@ body {
   color: var(--text-primary);
   font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
   min-height: 100vh;
+  min-height: 100dvh; /* Dynamic viewport height for mobile */
   overflow-x: hidden;
 }
 
@@ -37,6 +38,7 @@ body {
 
 .app {
   min-height: 100vh;
+  min-height: 100dvh; /* Dynamic viewport height for mobile */
   display: flex;
   flex-direction: column;
 }
@@ -208,9 +210,7 @@ body {
     grid-template-columns: 1fr;
   }
   
-  .sidebar {
-    order: -1;
-  }
+  /* Note: .main-content .sidebar ordering is not needed as tracking page uses its own styles */
   
   .app-header {
     flex-direction: column;
