@@ -18,6 +18,10 @@ const PREFERRED_MODEL = 'yolov8';
 const THREAT_COLOR = 'rgba(255, 50, 50, 1)'; // Red for threats
 const SAFE_COLOR = 'rgba(50, 255, 100, 1)'; // Green for non-threats
 
+// Error handling constants
+const MAX_MODEL_ERRORS_BEFORE_FALLBACK = 3;
+const RETRY_PAUSE_MS = 1000;
+
 function FullScreenCamera({ onClose, onDetections, onThreatLevel }) {
   const videoRef = useRef(null);
   const canvasRef = useRef(null);
@@ -35,6 +39,10 @@ function FullScreenCamera({ onClose, onDetections, onThreatLevel }) {
   const animationRef = useRef(null);
   const streamRef = useRef(null);
   const trackRef = useRef(null);
+  
+  // Error handling refs for model inference failures
+  const consecutiveErrorsRef = useRef(0);
+  const lastErrorTimeRef = useRef(0);
   
   // Communication panel state
   const [showCommPanel, setShowCommPanel] = useState(false);
@@ -146,6 +154,15 @@ function FullScreenCamera({ onClose, onDetections, onThreatLevel }) {
     try {
       setError(null);
       
+      // Stop any existing stream first to prevent NotReadableError/TrackStartError
+      if (streamRef.current) {
+        console.log('Stopping existing camera stream before starting new one');
+        const tracks = streamRef.current.getTracks();
+        tracks.forEach(track => track.stop());
+        streamRef.current = null;
+        trackRef.current = null;
+      }
+      
       // Advanced camera constraints for better capabilities
       const constraints = {
         video: {
@@ -162,7 +179,19 @@ function FullScreenCamera({ onClose, onDetections, onThreatLevel }) {
         audio: false
       };
       
-      const stream = await navigator.mediaDevices.getUserMedia(constraints);
+      let stream;
+      try {
+        stream = await navigator.mediaDevices.getUserMedia(constraints);
+      } catch (err) {
+        // Retry with relaxed constraints on OverconstrainedError
+        if (err.name === 'OverconstrainedError') {
+          console.warn('Camera constraints failed, retrying with relaxed settings');
+          stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: false });
+        } else {
+          throw err;
+        }
+      }
+      
       streamRef.current = stream;
       
       // Get video track and its capabilities
@@ -334,16 +363,48 @@ function FullScreenCamera({ onClose, onDetections, onThreatLevel }) {
       try {
         let classifiedDetections;
         
-        if (modelType === 'yolov8') {
-          const predictions = await model.detect(video);
-          classifiedDetections = model.classifyDetections(predictions);
-        } else if (modelType === 'demo') {
-          // Demo detector for demonstration
-          const predictions = model.detect(video);
-          classifiedDetections = model.classifyDetections(predictions);
-        } else {
-          const predictions = await model.detect(video);
-          classifiedDetections = classifyCocoDetections(predictions);
+        // Wrap model inference in try-catch with fallback mechanism
+        try {
+          if (modelType === 'yolov8') {
+            const predictions = await model.detect(video);
+            classifiedDetections = model.classifyDetections(predictions);
+          } else if (modelType === 'demo') {
+            // Demo detector for demonstration
+            const predictions = model.detect(video);
+            classifiedDetections = model.classifyDetections(predictions);
+          } else {
+            const predictions = await model.detect(video);
+            classifiedDetections = classifyCocoDetections(predictions);
+          }
+          
+          // Reset error counter on successful inference
+          consecutiveErrorsRef.current = 0;
+          
+        } catch (inferenceError) {
+          console.error('Model inference error:', inferenceError);
+          consecutiveErrorsRef.current++;
+          
+          // Check if we should fallback to demo detector
+          if (consecutiveErrorsRef.current >= MAX_MODEL_ERRORS_BEFORE_FALLBACK && modelType !== 'demo') {
+            console.warn(`${MAX_MODEL_ERRORS_BEFORE_FALLBACK} consecutive errors detected, falling back to demo detector`);
+            try {
+              await demoDetector.load();
+              setModel(demoDetector);
+              setModelType('demo');
+              consecutiveErrorsRef.current = 0;
+            } catch (demoError) {
+              console.error('Failed to load demo detector:', demoError);
+              // Stop camera and show error
+              stopCamera();
+              setError('Detection model failed. Please refresh the page.');
+              return;
+            }
+          }
+          
+          // Pause briefly before retrying to avoid tight loops
+          await new Promise(resolve => setTimeout(resolve, RETRY_PAUSE_MS));
+          animationRef.current = requestAnimationFrame(detect);
+          return;
         }
         
         ctx.clearRect(0, 0, canvas.width, canvas.height);
@@ -414,6 +475,16 @@ function FullScreenCamera({ onClose, onDetections, onThreatLevel }) {
         
       } catch (err) {
         console.error('Detection error:', err);
+        // On unexpected detection-loop errors, stop camera and set error
+        consecutiveErrorsRef.current++;
+        if (consecutiveErrorsRef.current >= MAX_MODEL_ERRORS_BEFORE_FALLBACK) {
+          console.error('Too many detection errors, stopping camera');
+          stopCamera();
+          setError('Detection failed. Please refresh the page and try again.');
+          return;
+        }
+        // Pause briefly before retrying
+        await new Promise(resolve => setTimeout(resolve, RETRY_PAUSE_MS));
       }
       
       animationRef.current = requestAnimationFrame(detect);

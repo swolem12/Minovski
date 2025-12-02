@@ -17,6 +17,10 @@ const PREFERRED_MODEL = 'yolov8';
 const THREAT_COLOR = 'rgba(255, 50, 50, 1)'; // Red for threats
 const SAFE_COLOR = 'rgba(50, 255, 100, 1)'; // Green for non-threats
 
+// Error handling constants
+const MAX_MODEL_ERRORS_BEFORE_FALLBACK = 3;
+const RETRY_PAUSE_MS = 1000;
+
 function CameraView({ onDetections, onThreatLevel, onCameraStream, isActive = true }) {
   const videoRef = useRef(null);
   const canvasRef = useRef(null);
@@ -34,6 +38,10 @@ function CameraView({ onDetections, onThreatLevel, onCameraStream, isActive = tr
   const lastDetectionsRef = useRef([]);
   const streamRef = useRef(null);
   const trackRef = useRef(null);
+  
+  // Error handling refs for model inference failures
+  const consecutiveErrorsRef = useRef(0);
+  const lastErrorTimeRef = useRef(0);
   
   // Camera capabilities state
   const [cameraCapabilities, setCameraCapabilities] = useState({
@@ -169,6 +177,15 @@ function CameraView({ onDetections, onThreatLevel, onCameraStream, isActive = tr
     try {
       setError(null);
       
+      // Stop any existing stream first to prevent NotReadableError/TrackStartError
+      if (streamRef.current) {
+        console.log('Stopping existing camera stream before starting new one');
+        const tracks = streamRef.current.getTracks();
+        tracks.forEach(track => track.stop());
+        streamRef.current = null;
+        trackRef.current = null;
+      }
+      
       // Advanced camera constraints for better capabilities
       const constraints = {
         video: {
@@ -185,8 +202,20 @@ function CameraView({ onDetections, onThreatLevel, onCameraStream, isActive = tr
         audio: false
       };
       
-      // This will trigger the permission dialog
-      const stream = await navigator.mediaDevices.getUserMedia(constraints);
+      // This will trigger the permission dialog with retry logic
+      let stream;
+      try {
+        stream = await navigator.mediaDevices.getUserMedia(constraints);
+      } catch (err) {
+        // Retry with relaxed constraints on OverconstrainedError
+        if (err.name === 'OverconstrainedError') {
+          console.warn('Camera constraints failed, retrying with relaxed settings');
+          stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: false });
+        } else {
+          throw err;
+        }
+      }
+      
       streamRef.current = stream;
       
       setPermissionStatus('granted');
@@ -268,6 +297,10 @@ function CameraView({ onDetections, onThreatLevel, onCameraStream, isActive = tr
         setError('Camera permission denied. Please enable camera access in your browser settings.');
       } else if (err.name === 'NotFoundError') {
         setError('No camera found on this device.');
+      } else if (err.name === 'NotReadableError' || err.name === 'TrackStartError') {
+        setError('Camera is in use by another application. Please close other apps and try again.');
+      } else if (err.name === 'OverconstrainedError') {
+        setError('Camera does not support the requested settings. Please try a different device.');
       } else {
         setError('Unable to access camera. Please try again.');
       }
@@ -360,18 +393,50 @@ function CameraView({ onDetections, onThreatLevel, onCameraStream, isActive = tr
         // Run detection based on model type
         let classifiedDetections;
         
-        if (modelType === 'yolov8') {
-          // YOLOv8 via ONNX Runtime Web
-          const predictions = await model.detect(video);
-          classifiedDetections = model.classifyDetections(predictions);
-        } else if (modelType === 'demo') {
-          // Demo detector for demonstration
-          const predictions = model.detect(video);
-          classifiedDetections = model.classifyDetections(predictions);
-        } else {
-          // COCO-SSD via TensorFlow.js
-          const predictions = await model.detect(video);
-          classifiedDetections = classifyCocoDetections(predictions);
+        // Wrap model inference in try-catch with fallback mechanism
+        try {
+          if (modelType === 'yolov8') {
+            // YOLOv8 via ONNX Runtime Web
+            const predictions = await model.detect(video);
+            classifiedDetections = model.classifyDetections(predictions);
+          } else if (modelType === 'demo') {
+            // Demo detector for demonstration
+            const predictions = model.detect(video);
+            classifiedDetections = model.classifyDetections(predictions);
+          } else {
+            // COCO-SSD via TensorFlow.js
+            const predictions = await model.detect(video);
+            classifiedDetections = classifyCocoDetections(predictions);
+          }
+          
+          // Reset error counter on successful inference
+          consecutiveErrorsRef.current = 0;
+          
+        } catch (inferenceError) {
+          console.error('Model inference error:', inferenceError);
+          consecutiveErrorsRef.current++;
+          
+          // Check if we should fallback to demo detector
+          if (consecutiveErrorsRef.current >= MAX_MODEL_ERRORS_BEFORE_FALLBACK && modelType !== 'demo') {
+            console.warn(`${MAX_MODEL_ERRORS_BEFORE_FALLBACK} consecutive errors detected, falling back to demo detector`);
+            try {
+              await demoDetector.load();
+              setModel(demoDetector);
+              setModelType('demo');
+              consecutiveErrorsRef.current = 0;
+            } catch (demoError) {
+              console.error('Failed to load demo detector:', demoError);
+              // Stop camera and show error
+              stopCamera();
+              setError('Detection model failed. Please refresh the page.');
+              return;
+            }
+          }
+          
+          // Pause briefly before retrying to avoid tight loops
+          await new Promise(resolve => setTimeout(resolve, RETRY_PAUSE_MS));
+          animationRef.current = requestAnimationFrame(detect);
+          return;
         }
         
         // Clear canvas
@@ -448,6 +513,16 @@ function CameraView({ onDetections, onThreatLevel, onCameraStream, isActive = tr
         
       } catch (err) {
         console.error('Detection error:', err);
+        // On unexpected detection-loop errors, stop camera and set error
+        consecutiveErrorsRef.current++;
+        if (consecutiveErrorsRef.current >= MAX_MODEL_ERRORS_BEFORE_FALLBACK) {
+          console.error('Too many detection errors, stopping camera');
+          stopCamera();
+          setError('Detection failed. Please refresh the page and try again.');
+          return;
+        }
+        // Pause briefly before retrying
+        await new Promise(resolve => setTimeout(resolve, RETRY_PAUSE_MS));
       }
       
       animationRef.current = requestAnimationFrame(detect);

@@ -589,25 +589,52 @@ If problems persist, try:
    */
   async startVideoStream(existingStream = null) {
     try {
+      // Stop any existing stream first to prevent NotReadableError/TrackStartError
+      if (this.localVideoStream && !existingStream) {
+        console.log('Stopping existing video stream before starting new one');
+        this.stopVideoStream();
+      }
+      
       if (existingStream) {
         this.localVideoStream = existingStream;
       } else {
-        // Get video stream from camera
-        this.localVideoStream = await navigator.mediaDevices.getUserMedia({
+        // Get video stream from camera with retry logic
+        const constraints = {
           video: {
             facingMode: 'environment',
             width: { ideal: 1280 },
             height: { ideal: 720 }
           },
           audio: false
-        });
+        };
+        
+        try {
+          this.localVideoStream = await navigator.mediaDevices.getUserMedia(constraints);
+        } catch (err) {
+          // Retry with relaxed constraints on OverconstrainedError
+          if (err.name === 'OverconstrainedError') {
+            console.warn('Camera constraints failed, retrying with relaxed settings');
+            this.localVideoStream = await navigator.mediaDevices.getUserMedia({
+              video: true,
+              audio: false
+            });
+          } else {
+            throw err;
+          }
+        }
       }
       
       this.isStreamingVideo = true;
       
-      // Call all connected peers with the video stream
-      for (const peerId of this.connections.keys()) {
-        this.callPeerWithVideo(peerId);
+      // Guard callPeerWithVideo to prevent errors
+      try {
+        // Call all connected peers with the video stream
+        for (const peerId of this.connections.keys()) {
+          this.callPeerWithVideo(peerId);
+        }
+      } catch (peerErr) {
+        console.error('Error calling peers with video:', peerErr);
+        // Continue anyway - video stream is still started
       }
       
       this.emit('video-started', { deviceId: this.deviceId });
@@ -621,9 +648,9 @@ If problems persist, try:
       } else if (err.name === 'NotFoundError' || err.name === 'DevicesNotFoundError') {
         errorMessage = 'No camera found on this device.';
       } else if (err.name === 'NotReadableError' || err.name === 'TrackStartError') {
-        errorMessage = 'Camera is in use by another application.';
+        errorMessage = 'Camera is in use by another application. Please close other apps and try again.';
       } else if (err.name === 'OverconstrainedError') {
-        errorMessage = 'Camera does not support the requested settings.';
+        errorMessage = 'Camera does not support the requested settings. Please try a different device.';
       }
       this.emit('video-error', { error: err, message: errorMessage });
       throw new Error(errorMessage);
