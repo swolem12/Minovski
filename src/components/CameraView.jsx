@@ -8,6 +8,7 @@ import { yolov8Detector } from '../utils/yolov8Detector';
 import { demoDetector } from '../utils/demoDetector';
 import { initOpenCV, isOpenCVReady, extractContours, drawContour, drawFallbackOutline, drawMinimalLabel } from '../utils/contourDetector';
 import audioAlert from '../utils/audioAlert';
+import { MAX_MODEL_ERRORS_BEFORE_FALLBACK, MODEL_ERROR_PAUSE_MS } from '../utils/cameraConstants';
 import './CameraView.css';
 
 // Model type: 'yolov8' or 'coco-ssd'
@@ -169,8 +170,16 @@ function CameraView({ onDetections, onThreatLevel, onCameraStream, isActive = tr
     try {
       setError(null);
       
+      // Stop any existing stream before requesting a new one to avoid NotReadableError
+      if (streamRef.current) {
+        const tracks = streamRef.current.getTracks();
+        tracks.forEach(track => track.stop());
+        streamRef.current = null;
+        trackRef.current = null;
+      }
+      
       // Advanced camera constraints for better capabilities
-      const constraints = {
+      const primaryConstraints = {
         video: {
           facingMode: 'environment', // Rear camera preferred
           width: { ideal: 1920 },
@@ -185,8 +194,29 @@ function CameraView({ onDetections, onThreatLevel, onCameraStream, isActive = tr
         audio: false
       };
       
+      // Relaxed fallback constraints
+      const fallbackConstraints = {
+        video: {
+          facingMode: 'environment'
+        },
+        audio: false
+      };
+      
       // This will trigger the permission dialog
-      const stream = await navigator.mediaDevices.getUserMedia(constraints);
+      let stream;
+      try {
+        stream = await navigator.mediaDevices.getUserMedia(primaryConstraints);
+      } catch (primaryErr) {
+        // Retry with relaxed constraints on OverconstrainedError
+        if (primaryErr.name === 'OverconstrainedError' || primaryErr.name === 'ConstraintNotSatisfiedError') {
+          console.warn('Primary camera constraints failed, retrying with relaxed constraints:', primaryErr);
+          stream = await navigator.mediaDevices.getUserMedia(fallbackConstraints);
+        } else {
+          // Re-throw other errors
+          throw primaryErr;
+        }
+      }
+      
       streamRef.current = stream;
       
       setPermissionStatus('granted');
@@ -263,11 +293,15 @@ function CameraView({ onDetections, onThreatLevel, onCameraStream, isActive = tr
       }
     } catch (err) {
       console.error('Camera permission error:', err);
-      if (err.name === 'NotAllowedError') {
+      if (err.name === 'NotAllowedError' || err.name === 'PermissionDeniedError') {
         setPermissionStatus('denied');
         setError('Camera permission denied. Please enable camera access in your browser settings.');
-      } else if (err.name === 'NotFoundError') {
+      } else if (err.name === 'NotFoundError' || err.name === 'DevicesNotFoundError') {
         setError('No camera found on this device.');
+      } else if (err.name === 'NotReadableError' || err.name === 'TrackStartError') {
+        setError('Camera is in use by another application.');
+      } else if (err.name === 'OverconstrainedError' || err.name === 'ConstraintNotSatisfiedError') {
+        setError('Camera does not support the requested settings. Tried relaxed constraints but still failed.');
       } else {
         setError('Unable to access camera. Please try again.');
       }
@@ -337,6 +371,10 @@ function CameraView({ onDetections, onThreatLevel, onCameraStream, isActive = tr
     
     let lastAlertTime = 0;
     const ALERT_COOLDOWN = 3000; // 3 seconds between alerts
+    let consecutiveModelErrors = 0;
+    let currentModel = model;
+    let currentModelType = modelType;
+    let hasFallenBackToDemoDetector = false;
     
     async function detect() {
       if (!video || video.paused || video.ended) {
@@ -360,18 +398,61 @@ function CameraView({ onDetections, onThreatLevel, onCameraStream, isActive = tr
         // Run detection based on model type
         let classifiedDetections;
         
-        if (modelType === 'yolov8') {
-          // YOLOv8 via ONNX Runtime Web
-          const predictions = await model.detect(video);
-          classifiedDetections = model.classifyDetections(predictions);
-        } else if (modelType === 'demo') {
-          // Demo detector for demonstration
-          const predictions = model.detect(video);
-          classifiedDetections = model.classifyDetections(predictions);
-        } else {
-          // COCO-SSD via TensorFlow.js
-          const predictions = await model.detect(video);
-          classifiedDetections = classifyCocoDetections(predictions);
+        // Wrap model inference in try/catch to handle model errors
+        try {
+          if (currentModelType === 'yolov8') {
+            // YOLOv8 via ONNX Runtime Web
+            const predictions = await currentModel.detect(video);
+            classifiedDetections = currentModel.classifyDetections(predictions);
+          } else if (currentModelType === 'demo') {
+            // Demo detector for demonstration
+            const predictions = currentModel.detect(video);
+            classifiedDetections = currentModel.classifyDetections(predictions);
+          } else {
+            // COCO-SSD via TensorFlow.js
+            const predictions = await currentModel.detect(video);
+            classifiedDetections = classifyCocoDetections(predictions);
+          }
+          
+          // Reset consecutive error counter on success
+          consecutiveModelErrors = 0;
+          
+        } catch (modelErr) {
+          console.error('Model inference error:', modelErr);
+          consecutiveModelErrors++;
+          
+          // After MAX_MODEL_ERRORS_BEFORE_FALLBACK consecutive errors, attempt fallback
+          if (consecutiveModelErrors >= MAX_MODEL_ERRORS_BEFORE_FALLBACK && !hasFallenBackToDemoDetector) {
+            console.warn(`${consecutiveModelErrors} consecutive model errors detected. Attempting fallback to demo detector...`);
+            
+            // Try to fallback to demo detector if available
+            if (demoDetector && currentModelType !== 'demo') {
+              try {
+                await demoDetector.load();
+                currentModel = demoDetector;
+                currentModelType = 'demo';
+                hasFallenBackToDemoDetector = true;
+                setError('Detection model encountered errors. Switched to demo detector.');
+                setModelType('demo');
+                consecutiveModelErrors = 0;
+                console.log('Successfully fell back to demo detector');
+              } catch (fallbackErr) {
+                console.error('Failed to load demo detector fallback:', fallbackErr);
+                setError('Detection model is experiencing issues. Retrying...');
+                // Pause briefly before retrying to avoid tight failure loop
+                await new Promise(resolve => setTimeout(resolve, MODEL_ERROR_PAUSE_MS));
+              }
+            } else {
+              // Demo detector not available or already using it
+              setError('Detection model is experiencing issues. Retrying...');
+              // Pause briefly before retrying to avoid tight failure loop
+              await new Promise(resolve => setTimeout(resolve, MODEL_ERROR_PAUSE_MS));
+            }
+          }
+          
+          // Continue loop even after error
+          animationRef.current = requestAnimationFrame(detect);
+          return;
         }
         
         // Clear canvas
@@ -447,7 +528,11 @@ function CameraView({ onDetections, onThreatLevel, onCameraStream, isActive = tr
         lastDetectionsRef.current = classifiedDetections;
         
       } catch (err) {
-        console.error('Detection error:', err);
+        console.error('Unexpected detection loop error:', err);
+        // On unexpected errors, stop camera and set error to prevent repeated crashes
+        stopCamera();
+        setError('An unexpected error occurred during detection. Camera stopped to prevent crashes.');
+        return; // Exit the loop
       }
       
       animationRef.current = requestAnimationFrame(detect);
@@ -460,7 +545,7 @@ function CameraView({ onDetections, onThreatLevel, onCameraStream, isActive = tr
         cancelAnimationFrame(animationRef.current);
       }
     };
-  }, [model, modelType, cameraActive, isActive, onDetections, onThreatLevel]);
+  }, [model, modelType, cameraActive, isActive, onDetections, onThreatLevel, stopCamera]);
   
   // Cleanup on unmount
   useEffect(() => {
