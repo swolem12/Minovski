@@ -589,25 +589,56 @@ If problems persist, try:
    */
   async startVideoStream(existingStream = null) {
     try {
+      // Stop any existing stream before requesting a new one to avoid NotReadableError
+      if (this.localVideoStream) {
+        this.localVideoStream.getTracks().forEach(track => track.stop());
+        this.localVideoStream = null;
+      }
+      
       if (existingStream) {
         this.localVideoStream = existingStream;
       } else {
-        // Get video stream from camera
-        this.localVideoStream = await navigator.mediaDevices.getUserMedia({
+        // Try primary constraints first, fallback to relaxed constraints on error
+        const primaryConstraints = {
           video: {
             facingMode: 'environment',
             width: { ideal: 1280 },
             height: { ideal: 720 }
           },
           audio: false
-        });
+        };
+        
+        const fallbackConstraints = {
+          video: true,
+          audio: false
+        };
+        
+        try {
+          // Get video stream from camera with primary constraints
+          this.localVideoStream = await navigator.mediaDevices.getUserMedia(primaryConstraints);
+        } catch (primaryErr) {
+          // Retry with fallback constraints if we hit constraint-related errors
+          if (primaryErr.name === 'OverconstrainedError' || primaryErr.name === 'ConstraintNotSatisfiedError') {
+            console.warn('Primary camera constraints failed, retrying with relaxed constraints:', primaryErr);
+            this.localVideoStream = await navigator.mediaDevices.getUserMedia(fallbackConstraints);
+          } else {
+            // Re-throw other errors
+            throw primaryErr;
+          }
+        }
       }
       
       this.isStreamingVideo = true;
       
       // Call all connected peers with the video stream
+      // Guard the loop so failure to call one peer doesn't abort starting the rest
       for (const peerId of this.connections.keys()) {
-        this.callPeerWithVideo(peerId);
+        try {
+          this.callPeerWithVideo(peerId);
+        } catch (callErr) {
+          console.error(`Failed to call peer ${peerId} with video:`, callErr);
+          // Continue to next peer
+        }
       }
       
       this.emit('video-started', { deviceId: this.deviceId });
@@ -622,8 +653,8 @@ If problems persist, try:
         errorMessage = 'No camera found on this device.';
       } else if (err.name === 'NotReadableError' || err.name === 'TrackStartError') {
         errorMessage = 'Camera is in use by another application.';
-      } else if (err.name === 'OverconstrainedError') {
-        errorMessage = 'Camera does not support the requested settings.';
+      } else if (err.name === 'OverconstrainedError' || err.name === 'ConstraintNotSatisfiedError') {
+        errorMessage = 'Camera does not support the requested settings. Tried relaxed constraints but still failed.';
       }
       this.emit('video-error', { error: err, message: errorMessage });
       throw new Error(errorMessage);
