@@ -6,7 +6,7 @@ import FluidSimulation from '../utils/fluidSimulation';
 import { classifyDetections as classifyCocoDetections, getOverallThreatLevel, isAerialThreat, estimateHandPositions, TRACKABLE_TYPES } from '../utils/objectClassifier';
 import { yolov8Detector } from '../utils/yolov8Detector';
 import { demoDetector } from '../utils/demoDetector';
-import { initOpenCV, isOpenCVReady, extractContours, drawContour, drawFallbackOutline, drawMinimalLabel } from '../utils/contourDetector';
+import { isOpenCVReady, extractContours, drawContour, drawFallbackOutline, drawMinimalLabel } from '../utils/contourDetector';
 import audioAlert from '../utils/audioAlert';
 import './CameraView.css';
 
