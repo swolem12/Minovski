@@ -591,14 +591,7 @@ If problems persist, try:
     try {
       // Stop any existing stream before requesting a new one to avoid NotReadableError
       if (this.localVideoStream) {
-        const tracks = this.localVideoStream.getTracks();
-        if (tracks && tracks.length > 0) {
-          tracks.forEach(track => {
-            if (track && typeof track.stop === 'function') {
-              track.stop();
-            }
-          });
-        }
+        this.localVideoStream.getTracks().forEach(track => track.stop());
         this.localVideoStream = null;
       }
       

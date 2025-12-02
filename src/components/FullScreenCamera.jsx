@@ -407,10 +407,13 @@ function FullScreenCamera({ onClose, onDetections, onThreatLevel }) {
           if (consecutiveModelErrorsRef.current >= MAX_MODEL_ERRORS_BEFORE_FALLBACK && !hasFallenBackToDemoDetectorRef.current) {
             console.warn(`${consecutiveModelErrorsRef.current} consecutive model errors detected. Attempting fallback to demo detector...`);
             
-            // Try to fallback to demo detector if available
-            if (demoDetector && currentModelTypeRef.current !== 'demo') {
+            // Try to fallback to demo detector if available and not already using it
+            if (currentModelTypeRef.current !== 'demo') {
               try {
-                await demoDetector.load();
+                // Load demo detector if not already loaded
+                if (!demoDetector.isLoaded()) {
+                  await demoDetector.load();
+                }
                 currentModelRef.current = demoDetector;
                 currentModelTypeRef.current = 'demo';
                 hasFallenBackToDemoDetectorRef.current = true;
@@ -425,7 +428,7 @@ function FullScreenCamera({ onClose, onDetections, onThreatLevel }) {
                 await new Promise(resolve => setTimeout(resolve, MODEL_ERROR_PAUSE_MS));
               }
             } else {
-              // Demo detector not available or already using it
+              // Already using demo detector
               setError('Detection model is experiencing issues. Retrying...');
               // Pause briefly before retrying to avoid tight failure loop
               await new Promise(resolve => setTimeout(resolve, MODEL_ERROR_PAUSE_MS));
