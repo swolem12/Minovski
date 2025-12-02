@@ -53,6 +53,22 @@ class YOLOv8Detector {
     try {
       console.log('Loading YOLOv8 model from:', modelPath);
       
+      // First, verify the model file exists and is actually an ONNX file
+      // This prevents ONNX Runtime from hanging when trying to parse HTML as a model
+      const response = await fetch(modelPath, { method: 'HEAD' });
+      
+      if (!response.ok) {
+        throw new Error(`Model file not found at ${modelPath} (status: ${response.status})`);
+      }
+      
+      const contentType = response.headers.get('content-type');
+      // Check for invalid content types that indicate the model wasn't found
+      // ONNX models should have application/octet-stream or similar binary content-type
+      const invalidTypes = ['text/html', 'text/plain', 'application/json', 'text/xml'];
+      if (contentType && invalidTypes.some(type => contentType.includes(type))) {
+        throw new Error(`Model file not found or invalid type (${contentType}). Expected ONNX model at ${modelPath}`);
+      }
+      
       // Configure ONNX Runtime Web - use local WASM files bundled with onnxruntime-web
       // The package includes WASM files that Vite will serve from node_modules
       
