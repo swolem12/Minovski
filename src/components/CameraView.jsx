@@ -50,11 +50,11 @@ function CameraView({ onDetections, onThreatLevel, onCameraStream, isActive = tr
       try {
         setIsLoading(true);
         
-        // Initialize OpenCV for contour detection (start early, await later)
-        setLoadingStatus('Initializing contour detection...');
-        const openCVPromise = initOpenCV().catch(err => {
-          console.warn('OpenCV initialization failed, will use fallback outlines:', err);
-        });
+        // TEMPORARILY SKIP OpenCV initialization to fix hanging issue
+        // OpenCV WASM initialization can hang in some environments
+        // TODO: Re-enable OpenCV after investigating the hanging issue
+        console.log('Skipping OpenCV initialization temporarily');
+        const openCVPromise = Promise.resolve(); // Skip OpenCV for now
         
         if (PREFERRED_MODEL === 'yolov8') {
           // Try loading YOLOv8 via ONNX Runtime Web
