@@ -37,6 +37,12 @@ function FullScreenCamera({ onClose, onDetections, onThreatLevel }) {
   const streamRef = useRef(null);
   const trackRef = useRef(null);
   
+  // Detection error tracking refs
+  const consecutiveModelErrorsRef = useRef(0);
+  const currentModelRef = useRef(null);
+  const currentModelTypeRef = useRef(null);
+  const hasFallenBackToDemoDetectorRef = useRef(false);
+  
   // Communication panel state
   const [showCommPanel, setShowCommPanel] = useState(false);
   
@@ -341,16 +347,20 @@ function FullScreenCamera({ onClose, onDetections, onThreatLevel }) {
   useEffect(() => {
     if (!model || !cameraActive) return;
     
+    // Initialize refs when model changes
+    if (currentModelRef.current !== model) {
+      currentModelRef.current = model;
+      currentModelTypeRef.current = modelType;
+      consecutiveModelErrorsRef.current = 0;
+      hasFallenBackToDemoDetectorRef.current = false;
+    }
+    
     const video = videoRef.current;
     const canvas = canvasRef.current;
     const ctx = canvas.getContext('2d');
     
     let lastAlertTime = 0;
     const ALERT_COOLDOWN = 3000;
-    let consecutiveModelErrors = 0;
-    let currentModel = model;
-    let currentModelType = modelType;
-    let hasFallenBackToDemoDetector = false;
     
     async function detect() {
       if (!video || video.paused || video.ended) {
@@ -374,39 +384,39 @@ function FullScreenCamera({ onClose, onDetections, onThreatLevel }) {
         
         // Wrap model inference in try/catch to handle model errors
         try {
-          if (currentModelType === 'yolov8') {
-            const predictions = await currentModel.detect(video);
-            classifiedDetections = currentModel.classifyDetections(predictions);
-          } else if (currentModelType === 'demo') {
+          if (currentModelTypeRef.current === 'yolov8') {
+            const predictions = await currentModelRef.current.detect(video);
+            classifiedDetections = currentModelRef.current.classifyDetections(predictions);
+          } else if (currentModelTypeRef.current === 'demo') {
             // Demo detector for demonstration
-            const predictions = currentModel.detect(video);
-            classifiedDetections = currentModel.classifyDetections(predictions);
+            const predictions = currentModelRef.current.detect(video);
+            classifiedDetections = currentModelRef.current.classifyDetections(predictions);
           } else {
-            const predictions = await currentModel.detect(video);
+            const predictions = await currentModelRef.current.detect(video);
             classifiedDetections = classifyCocoDetections(predictions);
           }
           
           // Reset consecutive error counter on success
-          consecutiveModelErrors = 0;
+          consecutiveModelErrorsRef.current = 0;
           
         } catch (modelErr) {
           console.error('Model inference error:', modelErr);
-          consecutiveModelErrors++;
+          consecutiveModelErrorsRef.current++;
           
           // After MAX_MODEL_ERRORS_BEFORE_FALLBACK consecutive errors, attempt fallback
-          if (consecutiveModelErrors >= MAX_MODEL_ERRORS_BEFORE_FALLBACK && !hasFallenBackToDemoDetector) {
-            console.warn(`${consecutiveModelErrors} consecutive model errors detected. Attempting fallback to demo detector...`);
+          if (consecutiveModelErrorsRef.current >= MAX_MODEL_ERRORS_BEFORE_FALLBACK && !hasFallenBackToDemoDetectorRef.current) {
+            console.warn(`${consecutiveModelErrorsRef.current} consecutive model errors detected. Attempting fallback to demo detector...`);
             
             // Try to fallback to demo detector if available
-            if (demoDetector && currentModelType !== 'demo') {
+            if (demoDetector && currentModelTypeRef.current !== 'demo') {
               try {
                 await demoDetector.load();
-                currentModel = demoDetector;
-                currentModelType = 'demo';
-                hasFallenBackToDemoDetector = true;
+                currentModelRef.current = demoDetector;
+                currentModelTypeRef.current = 'demo';
+                hasFallenBackToDemoDetectorRef.current = true;
                 setError('Detection model encountered errors. Switched to demo detector.');
                 setModelType('demo');
-                consecutiveModelErrors = 0;
+                consecutiveModelErrorsRef.current = 0;
                 console.log('Successfully fell back to demo detector');
               } catch (fallbackErr) {
                 console.error('Failed to load demo detector fallback:', fallbackErr);
@@ -496,7 +506,18 @@ function FullScreenCamera({ onClose, onDetections, onThreatLevel }) {
       } catch (err) {
         console.error('Unexpected detection loop error:', err);
         // On unexpected errors, stop camera and set error to prevent repeated crashes
-        stopCamera();
+        // Inline stopCamera logic to avoid dependency
+        if (videoRef.current && videoRef.current.srcObject) {
+          const tracks = videoRef.current.srcObject.getTracks();
+          tracks.forEach(track => track.stop());
+          videoRef.current.srcObject = null;
+          setCameraActive(false);
+        }
+        streamRef.current = null;
+        trackRef.current = null;
+        setTorchEnabled(false);
+        setZoomLevel(1);
+        
         setError('An unexpected error occurred during detection. Camera stopped to prevent crashes.');
         return; // Exit the loop
       }
@@ -511,7 +532,7 @@ function FullScreenCamera({ onClose, onDetections, onThreatLevel }) {
         cancelAnimationFrame(animationRef.current);
       }
     };
-  }, [model, modelType, cameraActive, onDetections, onThreatLevel, stopCamera]);
+  }, [model, modelType, cameraActive, onDetections, onThreatLevel]);
   
   // Cleanup on unmount
   useEffect(() => {
