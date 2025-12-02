@@ -166,11 +166,36 @@ function CameraView({ onDetections, onThreatLevel, onCameraStream, isActive = tr
     // Initialize audio on user interaction
     audioAlert.init();
     
+    // Centralized helper to handle camera access errors
+    const handleCameraAccessError = (err) => {
+      console.error('Camera permission error:', err);
+      // Improve error messages to the user
+      if (err.name === 'NotAllowedError' || err.name === 'PermissionDeniedError') {
+        setPermissionStatus('denied');
+        setError('Camera permission denied. Please enable camera access in your browser settings.');
+      } else if (err.name === 'NotFoundError' || err.name === 'DevicesNotFoundError') {
+        setError('No camera found on this device.');
+      } else if (err.name === 'NotReadableError' || err.name === 'TrackStartError') {
+        setError('Camera is in use by another application.');
+      } else if (err.name === 'OverconstrainedError' || err.name === 'ConstraintNotSatisfiedError') {
+        setError('Camera does not support the requested settings.');
+      } else {
+        setError('Unable to access camera. Please try again.');
+      }
+    };
+    
     try {
       setError(null);
       
+      // Stop any existing stream before requesting a new one
+      if (streamRef.current) {
+        const tracks = streamRef.current.getTracks();
+        tracks.forEach(track => track.stop());
+        streamRef.current = null;
+      }
+      
       // Advanced camera constraints for better capabilities
-      const constraints = {
+      const primaryConstraints = {
         video: {
           facingMode: 'environment', // Rear camera preferred
           width: { ideal: 1920 },
@@ -185,10 +210,27 @@ function CameraView({ onDetections, onThreatLevel, onCameraStream, isActive = tr
         audio: false
       };
       
-      // This will trigger the permission dialog
-      const stream = await navigator.mediaDevices.getUserMedia(constraints);
-      streamRef.current = stream;
+      let stream;
+      try {
+        // This will trigger the permission dialog
+        stream = await navigator.mediaDevices.getUserMedia(primaryConstraints);
+      } catch (primaryErr) {
+        // Retry with relaxed constraints on OverconstrainedError
+        if (primaryErr.name === 'OverconstrainedError' || primaryErr.name === 'ConstraintNotSatisfiedError') {
+          console.warn('Primary camera constraints failed, falling back to relaxed constraints:', primaryErr);
+          const fallbackConstraints = {
+            video: {
+              facingMode: 'environment'
+            },
+            audio: false
+          };
+          stream = await navigator.mediaDevices.getUserMedia(fallbackConstraints);
+        } else {
+          throw primaryErr;
+        }
+      }
       
+      streamRef.current = stream;
       setPermissionStatus('granted');
       
       // Get video track and its capabilities
@@ -262,15 +304,7 @@ function CameraView({ onDetections, onThreatLevel, onCameraStream, isActive = tr
         }
       }
     } catch (err) {
-      console.error('Camera permission error:', err);
-      if (err.name === 'NotAllowedError') {
-        setPermissionStatus('denied');
-        setError('Camera permission denied. Please enable camera access in your browser settings.');
-      } else if (err.name === 'NotFoundError') {
-        setError('No camera found on this device.');
-      } else {
-        setError('Unable to access camera. Please try again.');
-      }
+      handleCameraAccessError(err);
     }
   }, [onCameraStream]);
   
