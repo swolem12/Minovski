@@ -62,8 +62,11 @@ class YOLOv8Detector {
       }
       
       const contentType = response.headers.get('content-type');
-      if (contentType && contentType.includes('text/html')) {
-        throw new Error(`Model file appears to be HTML, not an ONNX model. Please add yolov8n.onnx to public/models/`);
+      // Check for invalid content types that indicate the model wasn't found
+      // ONNX models should have application/octet-stream or similar binary content-type
+      const invalidTypes = ['text/html', 'text/plain', 'application/json', 'text/xml'];
+      if (contentType && invalidTypes.some(type => contentType.includes(type))) {
+        throw new Error(`Model file not found or invalid type (${contentType}). Expected ONNX model at ${modelPath}`);
       }
       
       // Configure ONNX Runtime Web - use local WASM files bundled with onnxruntime-web
